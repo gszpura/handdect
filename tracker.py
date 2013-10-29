@@ -500,6 +500,8 @@ class StateTracker(object):
     def __init__(self):
         self.last_rect = None
         self.before_last_rect = None
+        self.really_old_rect = None
+
         self.predicted_rect = None
         self.prediction_counter = 0
         self.before_prediction_rect = None
@@ -596,17 +598,26 @@ class StateTracker(object):
             x = self.last_rect[0]+dx
             y = self.last_rect[1]+dy
             
+            self.really_old_rect = self.before_last_rect
             self.before_last_rect = self.last_rect
             self.predicted_rect = [x, y, w, h]
             return self.predicted_rect
-            
+
+
+    def smooth_random_motions(self, candidate):
+        if one_inside_another(candidate, self.last_rect):
+            return self.last_rect
+        elif one_inside_another(candidate, self.really_old_rect, 3.2):
+            return self.last_rect
+        else:
+            return candidate
+
+
     def prediction_limit(self, prediction):
         if prediction:
             self.prediction_counter += 1
-            print "PREDITION UP"
         else:
             self.prediction_counter = 0
-            print "PREDITION ZERO"
             self.before_prediction_rect = self.last_rect
         if self.prediction_counter >= 2:
             self.last_rect = self.before_prediction_rect
@@ -623,8 +634,9 @@ class StateTracker(object):
             self.last_rect[2] = 0.6*self.before_last_rect[2] + 0.4*self.last_rect
         except:
             pass
-            
-    def distinguish(self, img):
+        
+
+    def follow(self, img):
         prediction = False
         if self.last_rect == None:
             if len(self.rects) == 0:
@@ -645,18 +657,13 @@ class StateTracker(object):
         else:
             self.predicted_rect = self.speed_prediction()
             if len(self.rects) == 0:
-                #print "0) predicted rect:", self.predicted_rect
                 self.last_rect = self.predicted_rect
                 prediction = True
             elif len(self.rects) == 1:
                 if close_to_each_other(self.last_rect, self.rects[0]):
-                    if one_inside_another(self.rects[0], self.last_rect):
-                        pass
-                    else:
-                        self.last_rect = self.rects[0]
+                    self.last_rect = self.smooth_random_motions(self.rects[0])
                 else:
                     if is_far_away(self.last_rect, self.rects[0]):
-                        #print "1) predicted rect:", self.predicted_rect
                         self.last_rect = self.predicted_rect
                         prediction = True
                     elif is_big_enough(self.rects[0]):
@@ -668,17 +675,10 @@ class StateTracker(object):
                 if r1_close and r2_close:
                     self.last_rect = self.pick_better_rect()
                 elif r1_close:
-                    if one_inside_another(self.rects[0], self.last_rect):
-                        pass
-                    else:
-                        self.last_rect = self.rects[0]
+                    self.last_rect = self.smooth_random_motions(self.rects[0])
                 elif r2_close:
-                    if one_inside_another(self.rects[1], self.last_rect):
-                        pass
-                    else:
-                        self.last_rect = self.rects[1]
+                    self.last_rect = self.smooth_random_motions(self.rects[1])
                 else:
-                    #print "2) predicted rect:", self.predicted_rect
                     self.last_rect = self.predicted_rect 
                     prediction = True
                     #self.last_rect = self.pick_better_rect()
@@ -690,5 +690,3 @@ class StateTracker(object):
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
             
-    def get_hand_info(self):
-        pass

@@ -62,7 +62,7 @@ def mainSubHSV():
         final = trf.smart_and(move_cue, skin_cue)
         #final = trf.postprocess(final)
         track.update(final)
-        track.distinguish(f)
+        track.follow(f)
         #print time.time() - st
         cv2.imshow('IMG', f)
         cv2.imshow('IMG2', final)

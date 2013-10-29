@@ -78,18 +78,26 @@ def is_big_enough(rect1):
     return False
     
     
-def one_inside_another(last_rect, before_last_rect):
-    left = last_rect[0] >= before_last_rect[0]-5
-    right = last_rect[0] + last_rect[2] <= before_last_rect[0] + before_last_rect[2]+5
-    up = last_rect[1] >= before_last_rect[1]-5
-    down = last_rect[1] + last_rect[3] <= before_last_rect[1] + before_last_rect[3]+5
+def one_inside_another(current, previous, ratio=3):
+    """
+        Checks if rect 'current' is inside rect 'previous'.
+        @param ratio: ratio between areas which must be kept
+            to say that current rect is inside previous one
+    """
+    if current is None or previous is None:
+        return False
+    left = current[0] >= previous[0]-5
+    right = current[0] + current[2] <= previous[0] + previous[2]+5
+    up = current[1] >= previous[1]-5
+    down = current[1] + current[3] <= previous[1] + previous[3]+5
     sum = int(left) + int(right) + int(up) + int(down)
     if sum >= 3:
-        area_last = last_rect[2]*last_rect[3]
-        area_before_last = before_last_rect[2]*before_last_rect[3]
-        if area_before_last > 3*area_last:
+        current_area = current[2]*current[3]
+        previous_area = previous[2]*previous[3]
+        if previous_area > ratio*current_area:
             return True
     return False
+
 ##
 # alogrytm odrozniania reki od twarzy
 # 1. bgr2gray
