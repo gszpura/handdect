@@ -36,8 +36,7 @@ def draw_rects(image, rects, wide=1):
         x,y,w,h = rect
         cv2.rectangle(image, (x, y), (x+w, y+h), (255,0,0), wide)
         
-def draw_circles(self, img, positions):
-    r = 22
+def draw_circles(img, positions, r=20):
     for pos in positions:
         cv2.circle(img, pos, r, (255,0,0))
         
@@ -78,7 +77,7 @@ def is_big_enough(rect1):
     return False
     
     
-def one_inside_another(current, previous, ratio=3):
+def one_inside_another(current, previous, ratio=3, rigid=False):
     """
         Checks if rect 'current' is inside rect 'previous'.
         @param ratio: ratio between areas which must be kept
@@ -91,6 +90,8 @@ def one_inside_another(current, previous, ratio=3):
     up = current[1] >= previous[1]-5
     down = current[1] + current[3] <= previous[1] + previous[3]+5
     sum = int(left) + int(right) + int(up) + int(down)
+    if rigid and sum == 4:
+        return True
     if sum >= 3:
         current_area = current[2]*current[3]
         previous_area = previous[2]*previous[3]
@@ -109,3 +110,15 @@ def one_inside_another(current, previous, ratio=3):
 
 # alternatywnie mozna zaimplementowac jakas funkcje czyszczaca:
 # jedziemy od rogu (0,0) obrazu -> jesli gorny i prawy sasiad sa biali to ten nowy tez
+"""
+KOSZ NA ODPADY:
+
+def check_borders(self):
+        if self.predicted_rect is None or self.last_rect is None:
+            return False
+        if self.predicted_rect[0] < 0 or self.predicted_rect[0] > CFG_WIDTH - 25 or self.predicted_rect[1] > CFG_HEIGHT - 25:
+            self.predicted_rect = None
+            self.last_rect = None
+            return True
+        return False
+"""
