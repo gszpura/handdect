@@ -64,7 +64,7 @@ def close_to_each_other(rect1, rect2):
 def is_far_away(rect1, rect2):
     x1,y1,w1,h1 = rect1
     x2,y2,w2,h2 = rect2
-    far_away_x = min(int(1.5*w1), CFG_FAR_AWAY_X)
+    far_away_x = min(int(1.2*w1), CFG_FAR_AWAY_X)
     far_away_y = min(2*h1, CFG_FAR_AWAY_Y)
     if abs(x2 - x1) >= far_away_x or abs(y2 - y1) >= far_away_y:
         return True
@@ -121,4 +121,122 @@ def check_borders(self):
             self.last_rect = None
             return True
         return False
+
+
+
+
+        c2, c1  - kontury
+        h_c2, h_c1 - obrazy czarno - biale
+        #e2 = cv2.fitEllipse(c2)
+        #e1 = cv2.fitEllipse(c1)
+        #cv2.ellipse(h_c2, e2, (255,0,0))
+        #cv2.ellipse(h_c1, e1, (255,0,0))
+
+
+    def calc_arc_shape(self, edge):
+        ln = len(edge)
+        cnt = 0
+        outcome = []
+        for i in range(0,ln-1):
+            fst = edge[i]
+            sec = edge[i+1]
+            if fst - sec > 0:
+                cnt += 1
+            elif fst - sec < 0:
+                cnt -= 1
+            if cnt >= 3:
+                outcome.append(1)
+                cnt = 0
+            if 1 in outcome and cnt < -4:
+                outcome.append(-1)
+                cnt = 0
+        outcome = set(outcome)
+        if len(outcome) == 2:
+            return True
+        return False
+
+
+
+DTYPE = np.uint8
+ctypedef np.uint8_t DTYPE_t
+
+cdef class LeafNum:
+
+    cdef np.ndarray slice
+    cdef np.ndarray footprint
+
+    cdef int slice_len
+    cdef int footprint_len
+
+    cdef int first
+    cdef int last
+
+    cdef int length
+
+    def __init__(self, np.ndarray[DTYPE_t, ndim=1] sl):
+        self.slice = sl
+        self.first = BLACK
+        self.last = BLACK
+        self.length = 0
+        self.slice_len = len(sl)
+        self.footprint = np.zeros([20], dtype=DTYPE)
+        self.footprint_len = 0
+        self.stats()
+
+    cdef void stats(self):
+        cdef int iter_range = self.slice_len - 1 
+        cdef int max = 255
+        #self.first = max in self.slice[0:5] and WHITE or BLACK 
+        #self.last = max in self.slice[-5:-1] and WHITE or BLACK
+        cdef int index = 0
+        cdef DTYPE_t cnt, current
+        cnt = 1
+        current = self.slice[1] & 0x01
+        cdef unsigned int i
+        for i in xrange(1, iter_range):
+            if self.slice[i] & 0x01 != current:
+            #   current ^= 0x01
+            #   self.footprint[index] = cnt
+            #   cnt = 1
+            #   index += 1
+            #else:
+            #   cnt = cnt + 1
+                pass
+        #self.footprint_len = self.footprint.shape[0]
+
+
+cpdef fun(int az):
+    cdef int z = az
+    cdef int b
+    cdef unsigned int i
+    cdef object a = [1,2,3]
+    for i in xrange(0,10000000):
+        b = z*z
+        b = 4/3
+        b = b + 1
+        len(a)
+
+
+cpdef fun2(int az):
+    cdef int z = az
+    cdef int b
+    cdef unsigned int i
+    cdef list a = [1,2,3]
+    for i in xrange(0,10000000):
+        b = z*z
+        b = 4/3
+        b = b + 1
+        len(a)
+
+cpdef fun3(int az):
+    cdef int z = az
+    cdef int b
+    cdef unsigned int i
+    cdef np.ndarray a = np.array([1, 2, 3], dtype=np.int)
+    for i in xrange(0,10000000):
+        b = z*z
+        b = 4/3
+        b = b + 1
+        a.shape[0]
+
 """

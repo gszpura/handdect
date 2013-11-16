@@ -9,16 +9,19 @@
         * predykcja ruchu i wyznaczanie boxow z prawdopodobienstwem     
 
     StateTracker TODO:
-    - zrefaktoryzowac jakos kod, bo zaczyna robic sie balagan
     - pick_better_box ma korzystac z predyktora ruchu
     - pick_better_box powinien korzystac z momentow blobu oraz z mechanizmu rozpoznawania twarzy
-    - zaimplementowac mechanizm rozpoznawania twarzy
+    - zaimplementowac mechanizm rozpoznawania twarzy:
+        - uwzglednic mozliwosc nie rozpoznania konturow
+          w takim wypadku, jako rect reki wybierany jest ten blizej
+          ostatniego wystapienia, a drugi jest aktualizowany jako twarz
     - mozna zaimplementowac mechanizm wypelniania z sasiadami
         
 """
 
 
 import cv2
+import numpy as np
 from copy import copy
 from main_utils import draw_circles, \
     draw_rects, \
@@ -31,138 +34,45 @@ from main_utils import draw_circles, \
     draw_circles
 from collections import deque
 
-class Tracker:
+
+
+class RectSaver(object):
 
     def __init__(self):
-        self.x = -1
-        self.y = -1
-        self.vx = 0
-        self.vy = 0
-        self.predicted_x = -1
-        self.predicted_y = -1
-        self.sizex_up = 60
-        self.sizex_down = 70
-        self.sizey_up = 180
-        self.sizey_down = 30
-        self.the_group = [-1,-1,-1,-1]
-        self.enter_counter = 0
-        self.jump_counter = 0
-            
-    def draw_bounding_boxes(self, img, contours):
-        cnts = [cv2.boundingRect(cnt) for cnt in contours if 500 < cv2.contourArea(cnt) < 20000]
-        for cnt in cnts:
-            x,y,w,h = cnt
-            cv2.rectangle(img,(x,y),(x+w,y+h),(255,0,0), 1)
-            
-    def draw_groups(self, img, groups):
-        for g in groups:
-            x,x2,y,y2 = g
-            print g
-            cv2.rectangle(img, (x,y),(x2,y2), (255,0,0), 2)
-    
-    def draw_single_group(self, img, group):
-        x,x2,y,y2 = group
-        cv2.rectangle(img, (x,y),(x2,y2), (255,0,0), 2)
-            
-        
-    def process_bounding_boxes(self, contours):
-        sizex_up = self.sizex_up
-        sizex_down = self.sizex_down
-        sizey_up = self.sizey_up
-        sizey_down = self.sizey_down
-        rects = [cv2.boundingRect(cnt) for cnt in contours if 500 < cv2.contourArea(cnt) < 20000]
-        rects2 = sorted(rects)
+        self.img1 = None
+        self.img2 = None
+        self.state = 0
 
-        groups = []
-        change = False
-        change_cnt = 0
-        for rect in rects2:
-            if len(groups) == 0:
-                groups.append([rect[0]-sizex_down, rect[0]+sizex_up, rect[1]-sizey_down, rect[1]+sizey_up])
-                continue
-            change_cnt = 0
-            for g in groups:
-                if g[0] < rect[0] < g[1] and g[2] < rect[1] < g[3]:
-                    change = True
-                    break
-                change_cnt += 1
-            if change:
-                x2 = groups[change_cnt][1]
-                y1 = groups[change_cnt][2]
-                y2 = groups[change_cnt][3]
-                if rect[0] > x2 - sizex_up:  
-                    groups[change_cnt][1] = rect[0] + sizex_up
-                if rect[1] < y1 + sizey_down:
-                    groups[change_cnt][2] = rect[1] - sizey_down
-                elif rect[1] > y2 - sizey_up:
-                    groups[change_cnt][3] = rect[1] + sizey_up
-            elif len(groups) < 3:
-                groups.append([rect[0]-sizex_down, rect[0]+sizex_up, rect[1]-sizey_down, rect[1]+sizey_up])
-            change = False
-        return groups
-        
-    def best_group(self, groups):
-        the_g = self.the_group
-        diffx = 60
-        diffy = 60
-        jump_limit_x = 130
-        jump_limit_y_up = 90
-        jump_limit_y_down = 150
-        best_match = False
-        best_score = jump_limit_x + jump_limit_y_down
-        y_jump = False
-        for group in groups:
-            if the_g[0] == -1:
-                cent_x = (group[0]+group[1])/2
-                if  cent_x < diffx or (group[2]+group[3])/2 > (480 - diffy) or cent_x > (620 - diffx):
-                    self.enter_counter += 1
-                    if self.enter_counter > 10:
-                        return group
-            elif the_g[0] - jump_limit_x < group[0] < the_g[0] + jump_limit_x and the_g[2] - jump_limit_y_down < group[2] < the_g[2] + jump_limit_y_up:
-                score = abs(the_g[0] - group[0]) + abs(the_g[2] - group[2])
-                if score < best_score:
-                    best_match = group
-                    best_score = score
-                    y_jump = group[2] - the_g[2]
-        #prosta implementacja wstrzymywania sie z dlugim skokiem w dol obrazu
-        if y_jump and y_jump > jump_limit_y_up/2:
-            if self.jump_counter > 1:
-                self.jump_counter = 0
-                return best_match
-            else:
-                self.jump_counter += 1
-                return False
-        return best_match
-    
-    def update(self, img):
-        w = 40; h = 40    
-        cp = img.copy()
-        contours, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        
-        #cnts = [(cnt, cv2.moments(cnt)) for cnt in contours if 500 < cv2.contourArea(cnt) < 6000]
-        #positions = [(int(cnt[1]['m10']/cnt[1]['m00']), int(cnt[1]['m01']/cnt[1]['m00'])) for cnt in cnts]
-        
-        #draw_circles(img, positions)
-        self.draw_bounding_boxes(img, contours)
-        groups = self.process_bounding_boxes(contours)
-        
-        #self.draw_groups(img, groups)
-        print groups
-        best_group = self.best_group(groups)
-        if best_group:
-            self.the_group = best_group
-        if self.the_group:
-            self.draw_single_group(img, self.the_group)
+    def save_hand(self, img, rect1=None, rect2=None):
+        if rect1:
+            x,y,w,h = rect1
+            img1 = img[y:y+h, x:x+w] 
+            self.save_img(img1)
+        if rect2:
+            x,y,w,h = rect2
+            img2 = img[y:y+h, x:x+w]
+            self.save_img(img2)
+
+    def save_img(self, img):
+        cv2.imwrite('C:\\Python27\\pdym\\imgs\img%s.png' % self.state, img)
+        self.state += 1
+
+    @staticmethod
+    def show_hand(img, rect1=None, rect2=None):
+        if rect1:
+            x,y,w,h = rect1
+            zero = np.zeros((300,300), np.unit8)
+            img1 = img[y:y+h, x:x+w]
+            zero[0:h, 0:w] = img1 
+            cv2.imshow('1', zero)
+        if rect2:
+            x,y,w,h = rect2
+            zero = np.zeros((300,300), np.unit8)
+            img2 = img[y:y+h, x:x+w]
+            zero[0:h, 0:w] = img2
+            cv2.imshow('2', zero)    
             
-            
-            
-            
-###########################################################################################################            
-            
-            
-            
-            
-            
+
 class TrackerAL:
 
     def __init__(self):
@@ -189,7 +99,6 @@ class TrackerAL:
     def draw_groups(self, img, groups):
         for g in groups:
             x,x2,y,y2 = g
-            print g
             cv2.rectangle(img, (x,y),(x2,y2), (255,0,0), 1)
     
     def draw_single_group(self, img, group):
@@ -432,7 +341,6 @@ class TrackerNext:
             found[1] -= 20
             found[2] += 60
             found[3] += 80
-            #print found
         return found
         
     def track_rect(self, best_box):
@@ -487,7 +395,6 @@ class TrackerNext:
         self.draw_bounding_rects(img, contours)
         best_box = self.process_bounding_rects(contours)
         the_rect = self.track_rect(best_box)
-        print the_rect
         self.draw_rect(img, the_rect)
         
         
@@ -495,6 +402,8 @@ class StateTracker(object):
     
     def __init__(self):
         self.clear()
+        self.out_limit = 20
+        self.rsave = RectSaver()
 
     def clear(self):
         self.last_rect = None
@@ -504,9 +413,11 @@ class StateTracker(object):
         self.predicted_rect = None
         self.prediction_counter = 0
         self.before_prediction_rect = None
-        
-        self.wh = deque([(0,0)], maxlen=6)
-        self.average_wh = (0,0)
+
+        self.dx = 0
+        self.dy = 0
+        self.wh = deque([(0, 0)], maxlen=6)
+        self.average_wh = (0, 0)
         self.dxy = deque([(0, 0)], maxlen=3)
         self.average_dxy = (0, 0)
         self.rects = []
@@ -522,9 +433,14 @@ class StateTracker(object):
         return rects[:2]
         
     def update(self, img):
+        """things that have to be done before selection of new rect"""
         cp = img.copy()
         contours, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         self.rects = self.choose_contour(contours)
+        self.predicted_rect = self.prediction_calculations()
+        self.average_calculations()
+        self.really_old_rect = self.before_last_rect
+        self.before_last_rect = self.last_rect
         
     def pick_better_rect(self):
         if len(self.rects) == 1:
@@ -540,6 +456,8 @@ class StateTracker(object):
         return one_inside_another(self.last_rect, self.before_last_rect, 3, True)
         
     def outside_scope(self):
+        if self.last_rect is None:
+            return True
         if self.last_rect[0] < 0 or self.last_rect[0] > CFG_WIDTH or self.last_rect[1] < 0 or self.last_rect[1] > CFG_HEIGHT:
             return True
         return False
@@ -551,8 +469,7 @@ class StateTracker(object):
         lx = cx - 0.5*self.average_wh[0]
         rx = self.last_rect[0] + 0.5*self.average_wh[0]
         cy = self.last_rect[1] + 0.5*self.average_wh[1]
-
-        if lx < 10 and self.average_dxy[0] <= -10:
+        if lx < 0 and self.average_dxy[0] <= -10:
             return True
         if rx > CFG_WIDTH - 40 and self.average_dxy[0] >= 10:
             return True
@@ -560,7 +477,7 @@ class StateTracker(object):
             return True
         return False
         
-    def rect_prediction(self):
+    def prediction_calculations(self):
         """
             Finds prediction for next hand bounding rect
             and updates some variables.
@@ -570,42 +487,47 @@ class StateTracker(object):
             return self.last_rect
         else:
             if self.internal_one_inside_another():
-                self.dxy.append((0, 0))
-                self.wh.append((self.last_rect[2], self.last_rect[3]))
                 return self.before_last_rect
             if self.outside_scope():
-                self.dxy.clear()
-                self.wh.clear()
-                self.dxy.append((0, 0))
-                self.wh.append((0, 0))
                 return None
-            dx = self.last_rect[0] - self.before_last_rect[0]
-            dy = self.last_rect[1] - self.before_last_rect[1]
+
+            self.dx = self.last_rect[0] - self.before_last_rect[0]
+            self.dy = self.last_rect[1] - self.before_last_rect[1]
             w = (self.last_rect[2] + self.before_last_rect[2])/2
             h = (self.last_rect[3] + self.before_last_rect[3])/2
-            x = self.last_rect[0]+dx
-            y = self.last_rect[1]+dy
+            x = self.last_rect[0]+self.dx
+            y = self.last_rect[1]+self.dy
 
-            #move to update fun
-            self.wh.append((self.last_rect[2], self.last_rect[3]))
-            _wh = zip(*self.wh)
-            self.average_wh = (sum(_wh[0])/len(_wh[0]), sum(_wh[1])/len(_wh[1]))
-
-            #update here?
-            self.dxy.append((dx,dy))
-            _dxy = zip(*self.dxy)
-            self.average_dxy = (sum(_dxy[0])/len(_dxy[0]), sum(_dxy[1])/len(_dxy[1]))
-            
-            self.really_old_rect = self.before_last_rect
-            self.before_last_rect = self.last_rect
             self.predicted_rect = [x, y, w, h]
             return self.predicted_rect
+
+
+    def average_calculations(self):
+        """calculates averages from last found rect and earlier rects"""
+        if self.internal_one_inside_another():
+            self.dxy.append((0, 0))
+            self.wh.append((self.last_rect[2], self.last_rect[3]))
+            return 
+        if self.outside_scope():
+            self.dxy.clear()
+            self.wh.clear()
+            self.dxy.append((0, 0))
+            self.wh.append((0, 0))
+            return
+
+        self.wh.append((self.last_rect[2], self.last_rect[3]))
+        _wh = zip(*self.wh)
+        self.average_wh = (sum(_wh[0])/len(_wh[0]), sum(_wh[1])/len(_wh[1]))
+
+        self.dxy.append((self.dx, self.dy))
+        _dxy = zip(*self.dxy)
+        self.average_dxy = (sum(_dxy[0])/len(_dxy[0]), sum(_dxy[1])/len(_dxy[1]))
 
 
     def smooth_random_motions(self, candidate):
         if one_inside_another(candidate, self.last_rect):
             return self.last_rect
-        elif one_inside_another(candidate, self.really_old_rect, 3.2):
+        elif one_inside_another(candidate, self.really_old_rect, 2):
             return self.last_rect
         else:
             return candidate
@@ -619,7 +541,8 @@ class StateTracker(object):
             self.before_prediction_rect = self.last_rect
         if self.prediction_counter >= 2:
             self.last_rect = self.before_prediction_rect
-            
+        #if last_rect very close to edge and prediction counter > 20
+        #then clear() tracker
         
     def fit_rect_size(self):
         if self.last_rect is None:
@@ -628,19 +551,24 @@ class StateTracker(object):
         if self.last_rect[3] > CFG_HEIGHT/1.5:
             self.last_rect[3] = int(self.last_rect[3]/1.5)
         try:
-            self.last_rect[3] = 0.6*self.before_last_rect[3] + 0.4*self.last_rect
-            self.last_rect[2] = 0.6*self.before_last_rect[2] + 0.4*self.last_rect
-        except:
+            area_last = self.last_rect[3]*self.last_rect[2]
+            area_before_last = self.before_last_rect[3]* self.before_last_rect[2]
+            ratio = self.last_rect[2]/float(self.last_rect[3])
+            ratio_area = area_last/float(area_before_last)
+            #print ratio, ratio_area, area_before_last
+            if area_last > 1.8*area_before_last and ratio > 1.3 and area_last > 70000:
+                pass
+                #self.last_rect = self.before_last_rect
+        except Exception:
             pass
-        
 
     def follow(self, img):
         if self.out:
             self.out_counter += 1
-            print self.out_counter, self.last_rect
-            if self.out_counter > 12:
+            if self.out_counter > self.out_limit:
                 self.out = False
                 self.out_counter = 0
+                self.out_limit = 10
             return
 
         prediction = False
@@ -661,7 +589,6 @@ class StateTracker(object):
                 elif r2_close:
                     self.last_rect = self.rects[1]
         else:
-            self.predicted_rect = self.rect_prediction()
             if len(self.rects) == 0:
                 self.last_rect = self.predicted_rect
                 prediction = True
@@ -676,6 +603,7 @@ class StateTracker(object):
                         #check if face? or if its big enough
                         self.last_rect = self.rects[0]
             elif len(self.rects) == 2:
+                self.rsave.save_hand(img, self.rects[0], self.rects[1])
                 r1_close = close_to_each_other(self.last_rect, self.rects[0])
                 r2_close = close_to_each_other(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
@@ -689,6 +617,7 @@ class StateTracker(object):
                     prediction = True
                     #self.last_rect = self.pick_better_rect()
                   
+        #postprocessing
         if self.check_borders():
             self.clear()
             self.out = True

@@ -47,9 +47,12 @@ class Transformer:
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h,s,v = cv2.split(img_hsv)
         #daylight 6 - 20
-        #artificial light 145 - 200 or 6 - 20 / 2-20 ??
+        #artificial light 145 - 200 or 6 - 20 / 2-20 ?? or 145-200 + 4 -20
         d = cv2.inRange(h, np.array([145],np.uint8), 
                            np.array([200],np.uint8))
+        #d2 = cv2.inRange(h, np.array([4],np.uint8), 
+        #                    np.array([20],np.uint8))
+        #d = cv2.bitwise_or(d, d2)
         d = cv2.erode(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)

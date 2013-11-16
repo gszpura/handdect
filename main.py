@@ -10,7 +10,7 @@ import os
 import sys
 import time
 
-from tracker import TrackerAL, Tracker, TrackerNext, StateTracker
+from tracker import TrackerAL, TrackerNext, StateTracker
 from transformer import Transformer
 from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
