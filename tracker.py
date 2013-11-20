@@ -15,8 +15,6 @@
         - uwzglednic mozliwosc nie rozpoznania konturow
           w takim wypadku, jako rect reki wybierany jest ten blizej
           ostatniego wystapienia, a drugi jest aktualizowany jako twarz
-    - mozna zaimplementowac mechanizm wypelniania z sasiadami
-        
 """
 
 

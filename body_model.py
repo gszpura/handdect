@@ -1,8 +1,13 @@
+"""
+	TODO:
+	
+
+"""
+
 import cv2
 import numpy as np
 import time
 from collections import deque
-from hand_filter import HandFilter
 
 WHITE = 1
 BLACK = 0
@@ -14,7 +19,26 @@ UNKNOWN = 0
 BODY_PARTS = ["UNKNOWN", "HAND", "HEAD", "HEAD_AND_HAND"]
 
 HORIZONTAL_JUMP = 10
-VERTICAL_JUMP = 30
+VERTICAL_JUMP = 20
+
+
+def check_jumps(lst):
+    length = len(lst)
+    if length < 4:
+        return 0
+    _sum = 0
+    jumps = 0
+    avg = 999
+    for i in range(1, length):
+        _curr = lst[i] - lst[i-1]
+        if _curr > max(2*avg, 2):
+            jumps += 1
+        if _curr < -50:
+        	jumps -= 1
+        _sum = _sum + _curr
+        avg = _sum/i
+    return max(jumps, 0)
+
 
 class Leaf(object):
 
@@ -68,39 +92,119 @@ class LeafStats(object):
 
 	def calc_open_hand_shape(self, distribution):
 		all_leafs = sum(distribution)
-		fingers = distribution[9]  + distribution[5] + distribution[7]
-		if (distribution[9] >= 3 or distribution[5] >= 3  or distribution[7] >= 3) and fingers > 5 and distribution[3] > 3:
+		fingers = distribution[9] > 0.3*all_leafs or \
+				  distribution[7] + distribution[9] > 0.3*all_leafs or \
+				  sum(distribution[5:8]) > 0.3*all_leafs or \
+				  sum(distribution[6:9]) > 0.3*all_leafs
+		compact_body = distribution[3] > 0.1*all_leafs
+		long_fingers = distribution[7] + distribution[5] > 0.6*all_leafs or \
+					   distribution[7] + distribution[9] > 0.6*all_leafs
+
+		if (fingers and compact_body) or long_fingers:
+			return True
+		return False
+
+	def calc_half_face_shape(self, distribution):
+		all_leafs = sum(distribution)
+		half_face = distribution[2] > 0.85*all_leafs or \
+					distribution[2] + distribution[1] > 0.85*all_leafs
+		if half_face:
+			return True
+		return False
+
+	def calc_cut_face_shape(self, distribution):
+		all_leafs = sum(distribution)
+		cut_face = distribution[2] > 0.4*all_leafs and \
+				   (sum(distribution[1:4]) > 0.8*all_leafs)
+		if cut_face:
 			return True
 		return False
 
 	def calc_ear_shape(self, distribution):
-		if (distribution[2] > 9 and distribution[4] > 3) or (distribution[5] > 3 and not distribution[9] > 3):
+		"""
+			thumb > 0.25
+			ear < 0.25 ?
+		"""
+		all_leafs = sum(distribution)
+		small_ear = all_leafs < 15 and distribution[4] > 1
+		big_ear = (distribution[2] > 0.5*all_leafs and distribution[4] > 0.25*all_leafs) or \
+		   		  (distribution[5] > 0.25*all_leafs and distribution[3] > 0.5*all_leafs)
+		if small_ear or big_ear:
 			return True
 		return False
 
 	def calc_compact_shape(self, distribution):
 		all_leafs = sum(distribution)
-		if distribution[3] > 0.6*all_leafs or ((distribution[3] + distribution[2]) > 0.8*all_leafs and distribution[3] >= 0.4*all_leafs):
+		compact_no_border = distribution[3] > 0.6*all_leafs
+		compact_with_border = ((distribution[3] + distribution[2]) > 0.72*all_leafs and distribution[3] >= 0.4*all_leafs)
+		compact_spread = len(set(distribution)) > 4 and distribution[3] >= 0.4*all_leafs
+		if compact_no_border or compact_with_border or compact_spread:
 			return True
 		return False
 
-	def calc_one_color(self, distribution):
+	def calc_one_color_hand(self, distribution):
 		if distribution[1] > sum(distribution) - 2:
 			return True
 		return False
+
+	def calc_one_color_head(self, distribution):
+		if distribution[1] == sum(distribution):
+			return True
+		return False
+
+	def calc_edge_dev(self, edge):
+		if edge:
+			return np.std(edge)
+		return 0
+
+	def calc_thickness_dev(self, thickness):
+		if len(thickness) > 4:
+			s = sorted(thickness)
+			s = s[3:]
+			return np.std(s)
+		return 0
+
+	def calc_thickness_jumps(self, thickness):
+		if len(thickness) > 4:
+			return check_jumps(thickness)
+		return -1
+
+	def calc_line_variance(self, edge):
+		if len(edge) > 5:
+			s = sorted(edge)
+			s = s[2:-2]
+			length = len(s)
+			low = s[0]
+			high = s[-1]
+			rng = high - low
+			step = rng/length
+			var = 0
+			for i in range(0, length):
+				theory = low + i*step
+				real = s[i]
+				diff = real - theory
+				diff = diff**2
+				var += diff
+			return var/length
+		return 0
+
+	def calc_shape_type(self, thickness_dev, edge_dev):
+		shape_type = "normal"
+		if edge_dev > 40 and thickness_dev < 25:
+			shape_type = "rotated hand"
+		if edge_dev > 40 and thickness_dev > 40:
+			shape_type = "blurred"
+		return shape_type
 
 	def stats(self):
 		many_small_rects = False
 		distribution = self.init_distribution()
 		edge = []
-		right_edge_trace = []
-		left_edge_trace = []
-		
+		thickness = []
+
 		for leaf in self.leafs:
 			fst = leaf.first
 			lst = leaf.last
-			left_edge_trace.append(fst)
-			right_edge_trace.append(lst)
 			footprint = leaf.footprint
 			footprint_len = leaf.footprint_len
 			if fst == WHITE and footprint_len == 1 and footprint[0] > leaf.slice_len/2:
@@ -112,53 +216,64 @@ class LeafStats(object):
 			distribution[footprint_len+1] += 1
 			if footprint_len > 0:
 				edge.append(footprint[0])
+			if footprint_len == 1:
+				thickness.append(leaf.slice_len - footprint[0])
+			if footprint_len == 2:
+				thickness.append(footprint[1])
 
 		up_down_white = False
+		up_down_count = 0
 		for leaf in self.vleafs:
 			if leaf.all_white:
-				up_down_white = True
+				up_down_count += 1
+		if up_down_count >= 2:
+			up_down_white = True
 
-		if edge:
-			self.median = np.median(edge)
-			self.deviation = np.std(edge)
-		else:
-			self.median = -1
-			self.deviation = 0
+		self.thick_jumps = self.calc_thickness_jumps(thickness)
+		self.thick_dev = self.calc_thickness_dev(thickness)
+		self.deviation = self.calc_edge_dev(edge)
 
-		leaf_len = len(self.leafs)
-		left_edge_white = sum(left_edge_trace)
-		right_edge_white = sum(right_edge_trace)
-		left_edge_white = left_edge_white > 0.9*leaf_len or left_edge_white >= leaf_len - 2
-		right_edge_white = right_edge_white > 0.9*leaf_len or right_edge_white >= leaf_len - 2
-		self.white_edge = left_edge_white or right_edge_white
+		self.shape_type = self.calc_shape_type(self.thick_dev, self.deviation)
 		
 		self.many_small_rects = many_small_rects
 		self.ear_shape = self.calc_ear_shape(distribution)
+		self.half_face_shape = self.calc_half_face_shape(distribution)
+		self.cut_face_shape = self.calc_cut_face_shape(distribution)
 		self.open_hand_shape = self.calc_open_hand_shape(distribution)
 		self.compact_shape = self.calc_compact_shape(distribution)
 		self.up_down_white = up_down_white
-		self.one_color = self.calc_one_color(distribution)
+		self.one_color = self.calc_one_color_head(distribution)
+		self.edge_var = self.calc_line_variance(edge)
 		#debuging process
 		self.distribution = distribution
 		self.edge = edge
+		self.thickness = thickness
 
 	def pretty_print(self):
 		print "****************math***************"
-		print "first edge position median:", self.median
-		print "first edge position dev:", self.deviation
+		print "first edge dev:", self.deviation
+		print "thickness dev:", self.thick_dev
+		print "thickness jumps:", self.thick_jumps
 		print "***************shapes**************"
+		print "shape_type:", self.shape_type
 		print "ear shape:", self.ear_shape
 		print "open hand shape:", self.open_hand_shape
 		print "compact shape:", self.compact_shape
-		print "************white color************"
-		print "white edge:", self.white_edge
 		print "many small rects:", self.many_small_rects
 		print "up down white:", self.up_down_white
+		print "half face:", self.half_face_shape
+		print "cut face:", self.cut_face_shape
+		print "***********************************"
+		print self.distribution
+		print self.edge
+		print self.thickness
 
 class BodyPartsModel(object):
 
 	def __init__(self, img):
 		self.img = img
+		self.h = self.img.shape[0]
+		self.w = self.img.shape[1]
 		self.outcome = UNKNOWN
 		self.process()
 
@@ -168,9 +283,16 @@ class BodyPartsModel(object):
 		   between hand and head"""
 		img = self.img
 		size = img.shape[0]*img.shape[1]
-		if size < 10000:
+		if size < 4000:
 			return True
-		if size < 40000:
+		if size < 10000:
+			nonZero = cv2.countNonZero(img)
+			if nonZero > 0.95*size:
+				return False
+			if img.shape[0] > 1.5*img.shape[1] and nonZero > 0.3*size:
+				return False
+			return True
+		if 10000 <= size < 40000:
 			nonZero = cv2.countNonZero(img)
 			if nonZero < 0.3*size:
 				return True
@@ -182,8 +304,7 @@ class BodyPartsModel(object):
 		h = img.shape[0]
 		amount = h/HORIZONTAL_JUMP
 		fst_jumps = amount/2
-		tmp_sec = amount/2 - 3
-		sec_jumps = tmp_sec > 2 and tmp_sec or fst_jumps
+		sec_jumps = amount/2
 		c = 0
 		leafs = []
 		for i in range(0, fst_jumps):
@@ -201,7 +322,8 @@ class BodyPartsModel(object):
 	def get_vertical_leafs(self):
 		img = self.img
 		w = img.shape[1]
-		amount = w/VERTICAL_JUMP
+		how_many = w/VERTICAL_JUMP - 1
+		amount = min(8, how_many)
 		c = 20
 		leafs = []
 		for i in range(0, amount):
@@ -216,7 +338,7 @@ class BodyPartsModel(object):
 		vleafs = self.get_vertical_leafs()
 		leafs = self.get_leafs()
 		stats = LeafStats(leafs, vleafs)
-		if stats.open_hand_shape:
+		if stats.open_hand_shape and not stats.up_down_white:
 			self.outcome = HAND
 			print "open hand"
 		elif stats.compact_shape and stats.up_down_white:
@@ -225,49 +347,106 @@ class BodyPartsModel(object):
 		elif stats.up_down_white and stats.ear_shape:
 			self.outcome = HEAD
 			print "up_down&ear_shape"
+		elif stats.half_face_shape and stats.shape_type != "blurred":
+			self.outcome = HEAD
+			print "half_face"
+		elif stats.cut_face_shape and stats.up_down_white:
+			self.outcome = HEAD
+			print "cut_face"
 		elif stats.compact_shape and stats.ear_shape:
 			self.outcome = HAND
-			print "compact&ear"
+			print "compact&ear_shape"
 		elif stats.many_small_rects:
 			self.outcome = HAND
 			print "small rects"
-		elif 0 < stats.deviation < 12:
+		elif stats.compact_shape and stats.thick_jumps > 1:
+			self.outcome = HAND
+			print "thick_jumps_hand"
+		elif stats.compact_shape and stats.thick_jumps == 0:
 			self.outcome = HEAD
-			print "small_dev", stats.deviation
-		elif 0 < stats.deviation < 35:
+			print "thick_jumps_head"
+		elif 0 < stats.deviation < max(12, self.w*0.07):
+			self.outcome = HEAD
+			print "small dev", stats.deviation
+		elif 0 < stats.deviation < 35 and stats.thick_dev < 30:
 			self.outcome = HAND
-			print "normal dev", stats.deviation
-		elif stats.deviation > 35:
+			print "normal dev", stats.deviation, stats.thick_dev
+		elif 0 < stats.edge_var < 144 and stats.thick_dev < 30:
+			self.outcome = HAND
+			print "edge variation"
+		elif stats.deviation > 35 or stats.thick_dev > 30:
 			self.outcome = HEAD_AND_HAND
-			print "huge dev", stats.deviation
-		elif stats.one_color and stats.white_edge:
+			print "huge dev", stats.deviation, stats.thick_dev
+		elif stats.one_color:
+			self.outcome = HEAD
+			print "one_color_head"
+		else:
 			self.outcome = HAND
-			print "one_color"
+			print "one_color_hand"
 		self.stats = stats
 
 	def get_value(self):
 		return BODY_PARTS[self.outcome]
 
 
-test_list = [None, None, None, None, None, None, None, None, None, None]
-test_list.extend(["HEAD", "HAND", "HEAD", "HAND", "HEAD", "HAND", "HEAD_AND_HAND", "HEAD", "HEAD_AND_HAND", "HEAD"])
+def save_to_file(results):
+	f = open("C:\\Python27\\pdym\\imgs\\res.txt", 'w')
+	for r in results:
+		f.write(r)
+		f.write("\n")
+	f.close()
 
+
+def read_from_file():
+	results = []
+	f = open("C:\\Python27\\pdym\\imgs\\res.txt", 'r')
+	for line in f:
+		save = line[:-1]
+		results.append(save)
+	return results
+
+
+def compare_results(orig_results, new_results):
+	if len(orig_results) == 0:
+		return True
+	i = 0
+	bad = 0
+	for r in orig_results:
+		if r != new_results[i]:
+			print i, "...original:", r, "...new:", new_results[i]
+			bad += 1
+		i += 1
+	if bad == 0:
+		return True
+	return False
+
+DEBUG = True
+PRINT = False #False
+FORCE = False
 def main():
 	path = "C:\\Python27\\pdym\\imgs\\img%so.png"
-	for i in range(12,13):
+	#lst = range(10,48) + range(60,70)
+	lst = range(10, 100)
+	results = []
+	for i in lst:
 		p = path % i
 		img = cv2.imread(p)
 		img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 		b = BodyPartsModel(img)
-		print "Img:", i
-		if b.get_value() != test_list[i]:
-			print "############################"
-			print b.get_value(), "should be:", test_list[i]
-			print "############################"
+		value = b.get_value()
+		if DEBUG:
+			results.append(value)
+		if PRINT:
+			print "Img:", i, value
 			b.stats.pretty_print()
 			cv2.imshow('Img%s' % i, img)
-		print "\n"
-		
+	if DEBUG:
+		print "Comaparison:"
+		if compare_results(read_from_file(), results):
+			save_to_file(results)
+			print "...OK"
+		if FORCE:
+			save_to_file(results)
 
 main()
 cv2.waitKey(0)
