@@ -36,33 +36,12 @@ class ShapeDiscovery(object):
 
 	def discover(self, img, rect=None):
 		if rect == None:
-			rect = [0, 0, img.shape[1], img.shape[0]]
-		else:
-			#is this a camera-specific calibration?
-			xt,yt,wt,ht = rect
-			if wt >= 300:
-				rect[2] = 200
-			if ht >= 300:
-				rect[3] = 200
-			if wt >= ht and ht < 120:
-				rect[1] -= wt
-				rect[3] += wt
-				rect[2] += 0.1*wt
-			elif ht < 130:
-				rect[1] -= 0.1*rect[3]
-				rect[3] += 0.35*rect[3]
-			if wt*1.5 < ht:
-				rect[0] -= 0.2*rect[2]
-				rect[2] += 0.4*rect[2]
-			
+			return
 		x,y,w,h = rect
 		roi = img[y:y+h, x:x+w]
-		x = time.time()
-		roi_trf = self.apply_hsv_transformation(roi)
-		print time.time() - x
-		y = time.time()
+		#roi_trf = self.apply_hsv_transformation(roi)
+		roi_trf = self.apply_value_threshold_transformation(roi)
 		bpm = BodyPartsModel(roi_trf)
-		print time.time() - y, "body_parts_model"
 		return bpm.get_value()
 
 	def biggest_cnt(self, cnts):
@@ -133,8 +112,10 @@ class ShapeDiscovery(object):
 
 	def apply_value_threshold_transformation(self, roi):
 		hsv1 = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+		if hsv1 is None:
+			print roi
 		h1,s1,v1 = cv2.split(hsv1)
-		dummy, v1 = cv2.threshold(v1, 90, 255, cv2.THRESH_BINARY)
+		dummy, v1 = cv2.threshold(v1, 160, 255, cv2.THRESH_BINARY)
 		c1, hier = cv2.findContours(v1, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 		c1 = self.biggest_cnt(c1)
 		c1 = cv2.approxPolyDP(c1, 5, True)
@@ -147,7 +128,7 @@ class ShapeDiscovery(object):
 		path = "C:\\Python27\\pdym\\imgs\\img%s.png"
 		path2 = "C:\\Python27\\pdym\\imgs\\img%so.png"
 		try:
-			for i in range(0, 140):
+			for i in range(0, 189):
 				img = cv2.imread(path % i)
 				imgt = self.apply_value_threshold_transformation(img)
 				cv2.imwrite(path2 % i, imgt)
@@ -171,7 +152,7 @@ class ShapeDiscovery(object):
 
 def main1():
 	sd = ShapeDiscovery()
-	sd._change_bgr_to_hsv()
+	sd._change_bgr_to_gray()
 
 def main2():
 	path = "C:\\Python27\\pdym\\imgs\\img%s.png"
@@ -183,4 +164,5 @@ def main2():
 	print time.time() - a
 	print value
 
-main2()
+main1()
+#main2()

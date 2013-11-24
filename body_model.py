@@ -97,9 +97,7 @@ class LeafStats(object):
 				  sum(distribution[5:8]) > 0.3*all_leafs or \
 				  sum(distribution[6:9]) > 0.3*all_leafs
 		compact_body = distribution[3] > 0.1*all_leafs
-		long_fingers = distribution[7] + distribution[5] > 0.6*all_leafs or \
-					   distribution[7] + distribution[9] > 0.6*all_leafs
-
+		long_fingers = sum(distribution[5:14]) > 0.6*all_leafs
 		if (fingers and compact_body) or long_fingers:
 			return True
 		return False
@@ -116,7 +114,10 @@ class LeafStats(object):
 		all_leafs = sum(distribution)
 		cut_face = distribution[2] > 0.4*all_leafs and \
 				   (sum(distribution[1:4]) > 0.8*all_leafs)
-		if cut_face:
+		cut_face_other = distribution[2] > 0.4*all_leafs and \
+					distribution[3] + distribution[4] < distribution[2] and \
+					distribution[3] + distribution[3] > 0.3*all_leafs
+		if cut_face or cut_face_other:
 			return True
 		return False
 
@@ -130,6 +131,13 @@ class LeafStats(object):
 		big_ear = (distribution[2] > 0.5*all_leafs and distribution[4] > 0.25*all_leafs) or \
 		   		  (distribution[5] > 0.25*all_leafs and distribution[3] > 0.5*all_leafs)
 		if small_ear or big_ear:
+			return True
+		return False
+
+	def calc_half_hand_shape(self, distribution):
+		all_leafs = sum(distribution)
+		half_hand = sum(distribution[4:6]) > 0.5*all_leafs and distribution[4] > 0.3*all_leafs
+		if half_hand:
 			return True
 		return False
 
@@ -240,6 +248,7 @@ class LeafStats(object):
 		self.half_face_shape = self.calc_half_face_shape(distribution)
 		self.cut_face_shape = self.calc_cut_face_shape(distribution)
 		self.open_hand_shape = self.calc_open_hand_shape(distribution)
+		self.half_hand_shape = self.calc_half_hand_shape(distribution)
 		self.compact_shape = self.calc_compact_shape(distribution)
 		self.up_down_white = up_down_white
 		self.one_color = self.calc_one_color_head(distribution)
@@ -263,6 +272,7 @@ class LeafStats(object):
 		print "up down white:", self.up_down_white
 		print "half face:", self.half_face_shape
 		print "cut face:", self.cut_face_shape
+		print "half hand:", self.half_hand_shape
 		print "***********************************"
 		print self.distribution
 		print self.edge
@@ -322,9 +332,9 @@ class BodyPartsModel(object):
 	def get_vertical_leafs(self):
 		img = self.img
 		w = img.shape[1]
-		how_many = w/VERTICAL_JUMP - 1
+		how_many = int(0.75*w/VERTICAL_JUMP)
 		amount = min(8, how_many)
-		c = 20
+		c = w/4
 		leafs = []
 		for i in range(0, amount):
 			sl = img[:,c:c+1]
@@ -334,37 +344,41 @@ class BodyPartsModel(object):
 
 	def process(self):
 		if self.has_not_enough_information():
+			print "NOT ENOUGH"
 			return self.outcome
 		vleafs = self.get_vertical_leafs()
 		leafs = self.get_leafs()
 		stats = LeafStats(leafs, vleafs)
 		if stats.open_hand_shape and not stats.up_down_white:
 			self.outcome = HAND
-			print "open hand"
+			print "open hand->HAND"
 		elif stats.compact_shape and stats.up_down_white:
 			self.outcome = HEAD
-			print "compact&up_down"
+			print "compact&up down->FACE"
 		elif stats.up_down_white and stats.ear_shape:
 			self.outcome = HEAD
-			print "up_down&ear_shape"
+			print "up down&ear shape->FACE"
 		elif stats.half_face_shape and stats.shape_type != "blurred":
 			self.outcome = HEAD
-			print "half_face"
+			print "half face"
 		elif stats.cut_face_shape and stats.up_down_white:
 			self.outcome = HEAD
-			print "cut_face"
+			print "cut face"
 		elif stats.compact_shape and stats.ear_shape:
 			self.outcome = HAND
-			print "compact&ear_shape"
+			print "compact&ear shape"
+		elif stats.half_hand_shape:
+			self.outcome = HAND
+			print "half hand"
 		elif stats.many_small_rects:
 			self.outcome = HAND
 			print "small rects"
 		elif stats.compact_shape and stats.thick_jumps > 1:
 			self.outcome = HAND
-			print "thick_jumps_hand"
+			print "thick jumps hand"
 		elif stats.compact_shape and stats.thick_jumps == 0:
 			self.outcome = HEAD
-			print "thick_jumps_head"
+			print "thick jumps head"
 		elif 0 < stats.deviation < max(12, self.w*0.07):
 			self.outcome = HEAD
 			print "small dev", stats.deviation
@@ -379,10 +393,10 @@ class BodyPartsModel(object):
 			print "huge dev", stats.deviation, stats.thick_dev
 		elif stats.one_color:
 			self.outcome = HEAD
-			print "one_color_head"
+			print "one color head"
 		else:
 			self.outcome = HAND
-			print "one_color_hand"
+			print "one color hand"
 		self.stats = stats
 
 	def get_value(self):
@@ -413,7 +427,7 @@ def compare_results(orig_results, new_results):
 	bad = 0
 	for r in orig_results:
 		if r != new_results[i]:
-			print i, "...original:", r, "...new:", new_results[i]
+			print i+1, "...original:", r, "...new:", new_results[i]
 			bad += 1
 		i += 1
 	if bad == 0:
@@ -421,12 +435,11 @@ def compare_results(orig_results, new_results):
 	return False
 
 DEBUG = True
-PRINT = False #False
+DEBUG = False
 FORCE = False
 def main():
 	path = "C:\\Python27\\pdym\\imgs\\img%so.png"
-	#lst = range(10,48) + range(60,70)
-	lst = range(10, 100)
+	lst = range(3, 10)
 	results = []
 	for i in lst:
 		p = path % i
@@ -434,10 +447,10 @@ def main():
 		img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 		b = BodyPartsModel(img)
 		value = b.get_value()
+		print "Img:", i, value
 		if DEBUG:
 			results.append(value)
-		if PRINT:
-			print "Img:", i, value
+		if not DEBUG:
 			b.stats.pretty_print()
 			cv2.imshow('Img%s' % i, img)
 	if DEBUG:

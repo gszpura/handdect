@@ -6,14 +6,6 @@ from main_utils import LATTICE_X, LATTICE_Y
 
 absd = cv2.absdiff
 
-
-def show_hsv(img, x1, x2, y1, y2):
-    """ draws lines of roi in the image """
-    cv2.line(img, (x1, y1),(x1, y2),(255,0,0))
-    cv2.line(img, (x1, y1),(x2, y1),(255,0,0))
-    cv2.line(img, (x2, y2),(x2, y1),(255,0,0))
-    cv2.line(img, (x2, y2),(x1, y2),(255,0,0))
-
 class Transformer:
 
     def __init__(self, height=480, width=640):
@@ -50,9 +42,9 @@ class Transformer:
         #artificial light 145 - 200 or 6 - 20 / 2-20 ?? or 145-200 + 4 -20
         d = cv2.inRange(h, np.array([145],np.uint8), 
                            np.array([200],np.uint8))
-        d2 = cv2.inRange(h, np.array([4],np.uint8), 
-                            np.array([20],np.uint8))
-        d = cv2.bitwise_or(d, d2)
+        #d2 = cv2.inRange(h, np.array([1],np.uint8), 
+        #                    np.array([7],np.uint8))
+        #d = cv2.bitwise_or(d, d2)
         d = cv2.erode(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)
@@ -62,15 +54,6 @@ class Transformer:
         
         cv2.imshow('SKIN CUE', result)
         return result
-        
-    def edge_cue(self, img):
-        """ATTENTION: too slow"""
-        blurKsize = 5
-        edgeKsize = 5
-        img2 = cv2.medianBlur(img, blurKsize)
-        gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-        cv2.Laplacian(gray, cv2.cv.CV_8U, gray, ksize = edgeKsize)
-        return gray
         
     def move_cue(self, img):
         element = self.element

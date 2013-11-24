@@ -89,10 +89,10 @@ def one_inside_another(current, previous, ratio=3, rigid=False):
     right = current[0] + current[2] <= previous[0] + previous[2]+5
     up = current[1] >= previous[1]-5
     down = current[1] + current[3] <= previous[1] + previous[3]+5
-    sum = int(left) + int(right) + int(up) + int(down)
-    if rigid and sum == 4:
+    _sum = int(left) + int(right) + int(up) + int(down)
+    if rigid and _sum == 4:
         return True
-    if sum >= 3:
+    if _sum >= 3:
         current_area = current[2]*current[3]
         previous_area = previous[2]*previous[3]
         if previous_area > ratio*current_area:

@@ -55,14 +55,13 @@ def mainSubHSV():
     while(1):    
         _,f = c.read()
         st = time.time()
-        small = cv2.resize(f, (320, 240))
         move_cue = trf.move_cue(f)
         skin_cue = trf.skin_color_cue(f)
         final = trf.smart_and(move_cue, skin_cue)
         #final = trf.postprocess(final)
         track.update(final)
         track.follow(f)
-        #print time.time() - st
+        print time.time() - st
         cv2.imshow('IMG', f)
         cv2.imshow('IMG2', final)
         k = cv2.waitKey(20)	

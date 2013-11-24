@@ -21,6 +21,8 @@
 import cv2
 import numpy as np
 from copy import copy
+from collections import deque
+
 from main_utils import draw_circles, \
     draw_rects, \
     close_to_edge, \
@@ -30,9 +32,10 @@ from main_utils import draw_circles, \
     one_inside_another, \
     CFG_HEIGHT, CFG_WIDTH, \
     draw_circles
-from collections import deque
+from shape_discovery import ShapeDiscovery
 
 
+BODY_PARTS = ["UNKNOWN", "HAND", "HEAD", "HEAD_AND_HAND"]
 
 class RectSaver(object):
 
@@ -395,13 +398,33 @@ class TrackerNext:
         the_rect = self.track_rect(best_box)
         self.draw_rect(img, the_rect)
         
-        
+
+
+def correct_rect(rect):
+    xt,yt,wt,ht = rect
+    rect = list(rect)
+    print wt*ht
+    if wt*ht < 4000:
+        rect[0] = max(0, rect[0] - 40)
+        rect[1] = max(0, rect[1] - 40)
+        rect[2] = rect[2] + 80
+        rect[3] = rect[3] + 80
+    elif wt*ht < 13000:
+        rect[3] += 50
+        rect[0] = max(0, rect[0] - 30)
+        rect[2] = rect[2] + 60
+    if rect[2] > 1.25*rect[3]:
+        rect[3] = rect[3] + 60
+    return tuple(rect)
+
+
 class StateTracker(object):
     
     def __init__(self):
         self.clear()
         self.out_limit = 20
         self.rsave = RectSaver()
+        self.dsc = ShapeDiscovery()
 
     def clear(self):
         self.last_rect = None
@@ -526,7 +549,8 @@ class StateTracker(object):
         if one_inside_another(candidate, self.last_rect):
             return self.last_rect
         elif one_inside_another(candidate, self.really_old_rect, 2):
-            return self.last_rect
+            return self.really_old_rect
+            #return self.last_rect
         else:
             return candidate
 
@@ -548,17 +572,6 @@ class StateTracker(object):
         self.last_rect = list(self.last_rect)
         if self.last_rect[3] > CFG_HEIGHT/1.5:
             self.last_rect[3] = int(self.last_rect[3]/1.5)
-        try:
-            area_last = self.last_rect[3]*self.last_rect[2]
-            area_before_last = self.before_last_rect[3]* self.before_last_rect[2]
-            ratio = self.last_rect[2]/float(self.last_rect[3])
-            ratio_area = area_last/float(area_before_last)
-            #print ratio, ratio_area, area_before_last
-            if area_last > 1.8*area_before_last and ratio > 1.3 and area_last > 70000:
-                pass
-                #self.last_rect = self.before_last_rect
-        except Exception:
-            pass
 
     def follow(self, img):
         if self.out:
@@ -591,17 +604,18 @@ class StateTracker(object):
                 self.last_rect = self.predicted_rect
                 prediction = True
             elif len(self.rects) == 1:
+                dsc_rect = correct_rect(self.rects[0])
+                val = self.dsc.discover(img, dsc_rect)
+                _type = BODY_PARTS[val]
                 if close_to_each_other(self.last_rect, self.rects[0]):
                     self.last_rect = self.smooth_random_motions(self.rects[0])
                 else:
                     if is_far_away(self.last_rect, self.rects[0]):
-                        self.last_rect = self.predicted_rect
                         prediction = True
-                    elif is_big_enough(self.rects[0]):
-                        #check if face? or if its big enough
+                    elif is_big_enough(self.rects[0]) and _type != "HEAD":
                         self.last_rect = self.rects[0]
             elif len(self.rects) == 2:
-                self.rsave.save_hand(img, self.rects[0], self.rects[1])
+                #self.rsave.save_hand(img, self.rects[0], self.rects[1])
                 r1_close = close_to_each_other(self.last_rect, self.rects[0])
                 r2_close = close_to_each_other(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
@@ -614,7 +628,7 @@ class StateTracker(object):
                     self.last_rect = self.predicted_rect 
                     prediction = True
                     #self.last_rect = self.pick_better_rect()
-                  
+
         #postprocessing
         if self.check_borders():
             self.clear()
@@ -622,6 +636,8 @@ class StateTracker(object):
             return
         self.prediction_limit(prediction)
         self.fit_rect_size()
+        if self.last_rect and self.before_last_rect:
+            print self.last_rect[0] - self.before_last_rect[0], self.last_rect[1] - self.before_last_rect[1]
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
 
