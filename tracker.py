@@ -9,12 +9,10 @@
         * predykcja ruchu i wyznaczanie boxow z prawdopodobienstwem     
 
     StateTracker TODO:
-    - pick_better_box ma korzystac z predyktora ruchu
-    - pick_better_box powinien korzystac z momentow blobu oraz z mechanizmu rozpoznawania twarzy
-    - zaimplementowac mechanizm rozpoznawania twarzy:
-        - uwzglednic mozliwosc nie rozpoznania konturow
-          w takim wypadku, jako rect reki wybierany jest ten blizej
-          ostatniego wystapienia, a drugi jest aktualizowany jako twarz
+    - rozwiazac sporadycznie pojawiajace sie problemy z przechodzeniem reki nad twarza/wyrzucaniem sie aplikacji
+    - napisac od nowa BodyPartsModel
+    - convectivyDefects
+    - kalibracja
 """
 
 
@@ -31,11 +29,16 @@ from main_utils import draw_circles, \
     is_big_enough, \
     one_inside_another, \
     CFG_HEIGHT, CFG_WIDTH, \
-    draw_circles
+    draw_circles, \
+    average_rect, \
+    average_queue, \
+    is_near_rect, \
+    correct_rect, \
+    distance_between_rects
 from shape_discovery import ShapeDiscovery
 
 
-BODY_PARTS = ["UNKNOWN", "HAND", "HEAD", "HEAD_AND_HAND"]
+BODY_PARTS = ["UNKNOWN", "HAND", "FACE", "FACE_AND_HAND"]
 
 class RectSaver(object):
 
@@ -397,25 +400,9 @@ class TrackerNext:
         best_box = self.process_bounding_rects(contours)
         the_rect = self.track_rect(best_box)
         self.draw_rect(img, the_rect)
-        
+   
 
-
-def correct_rect(rect):
-    xt,yt,wt,ht = rect
-    rect = list(rect)
-    print wt*ht
-    if wt*ht < 4000:
-        rect[0] = max(0, rect[0] - 40)
-        rect[1] = max(0, rect[1] - 40)
-        rect[2] = rect[2] + 80
-        rect[3] = rect[3] + 80
-    elif wt*ht < 13000:
-        rect[3] += 50
-        rect[0] = max(0, rect[0] - 30)
-        rect[2] = rect[2] + 60
-    if rect[2] > 1.25*rect[3]:
-        rect[3] = rect[3] + 60
-    return tuple(rect)
+##########################################################################################################################################     
 
 
 class StateTracker(object):
@@ -425,6 +412,7 @@ class StateTracker(object):
         self.out_limit = 20
         self.rsave = RectSaver()
         self.dsc = ShapeDiscovery()
+        self.head_rect = [200, 200, 0, 0]
 
     def clear(self):
         self.last_rect = None
@@ -444,6 +432,7 @@ class StateTracker(object):
         self.rects = []
 
         self.out_counter = 0
+        self.is_not_real_counter = 0
         self.out = True
 
     def choose_contour(self, contours):
@@ -462,16 +451,6 @@ class StateTracker(object):
         self.average_calculations()
         self.really_old_rect = self.before_last_rect
         self.before_last_rect = self.last_rect
-        
-    def pick_better_rect(self):
-        if len(self.rects) == 1:
-            return self.rects[0]
-        points1 = 0
-        points2 = 0
-        #area
-        a1 = self.rects[0][2]*self.rects[0][3]
-        a2 = self.rects[1][2]*self.rects[1][3]
-        return self.last_rect
     
     def internal_one_inside_another(self):
         return one_inside_another(self.last_rect, self.before_last_rect, 3, True)
@@ -486,6 +465,7 @@ class StateTracker(object):
     def check_borders(self):
         if self.last_rect is None:
             return False
+        x,y,w,h = self.last_rect
         cx = self.last_rect[0] + 0.5*self.last_rect[2]
         lx = cx - 0.5*self.average_wh[0]
         rx = self.last_rect[0] + 0.5*self.average_wh[0]
@@ -495,6 +475,8 @@ class StateTracker(object):
         if rx > CFG_WIDTH - 40 and self.average_dxy[0] >= 10:
             return True
         if cy > CFG_HEIGHT - 40 and self.average_dxy[1] >= 10:
+            return True
+        if self.is_not_real_counter > 6 and (x < 30 or x + w > CFG_WIDTH - 30 or y < 30 or y + h > CFG_HEIGHT - 30):
             return True
         return False
         
@@ -561,19 +543,72 @@ class StateTracker(object):
         else:
             self.prediction_counter = 0
             self.before_prediction_rect = self.last_rect
-        if self.prediction_counter >= 2:
+        if self.prediction_counter >= 2 and self.last_rect is not None:
             self.last_rect = self.before_prediction_rect
-        #if last_rect very close to edge and prediction counter > 20
-        #then clear() tracker
-        
+
+
     def fit_rect_size(self):
         if self.last_rect is None:
             return
         self.last_rect = list(self.last_rect)
+        #jezeli dwa boxy na siebie nachodza to natnij box reki
+        #x+w > xg ale x < xg
+        #x < xg + wg ale x+w > xg + wg
+        x,y,w,h = self.last_rect
+        hx,hy,hw,hh = self.head_rect
+        primary_condition_x = x + w > hx and x < hx
+        primary_condition_y = y + h > hy and y < hy
+        if primary_condition_x and w > 300:
+            diff = x + w - hx
+            self.last_rect[2] = w - diff/2
+            self.last_rect[0] = x + diff/2
+        if primary_condition_y and primary_condition_x and h > 300:
+            diff = y + h - hy
+            self.last_rect[1] = y + diff/3
+            self.last_rect[3] = h - 2*diff/3
         if self.last_rect[3] > CFG_HEIGHT/1.5:
             self.last_rect[3] = int(self.last_rect[3]/1.5)
 
+    def analyze_rects(self, img):
+        _type = "UNKNOWN"
+        if self.last_rect is not None:
+            dsc_rect = correct_rect(self.last_rect)
+            val = self.dsc.discover(img, dsc_rect)
+            _type = BODY_PARTS[val]
+        elif len(self.rects) == 1:
+            dsc_rect = correct_rect(self.rects[0])
+            val = self.dsc.discover(img, dsc_rect)
+            _type = BODY_PARTS[val]
+        print _type, #####################
+
+        is_real = self.dsc.is_real()
+        if len(self.rects) == 0:
+            if is_real:
+                self.is_not_real_counter = 0
+            else:
+                self.is_not_real_counter += 1
+        elif len(self.rects) == 1:
+            if self.rects[0] == self.last_rect:
+                pass
+            elif is_real:
+                self.is_not_real_counter = 0
+            else:
+                self.is_not_real_counter += 1
+            if self.last_rect is None and _type == "FACE":
+                self.head_rect = average_rect(self.head_rect, self.rects[0])
+        elif len(self.rects) == 2:
+            if self.rects[0] == self.last_rect and not is_near_rect(self.last_rect, self.rects[1]):
+                self.head_rect = average_rect(self.head_rect, self.rects[1])
+            elif self.rects[1] == self.last_rect and not is_near_rect(self.last_rect, self.rects[0]):
+                self.head_rect = average_rect(self.head_rect, self.rects[0])
+            if is_real:
+                self.is_not_real_counter = 0
+            else:
+                self.is_not_real_counter += 1
+
+
     def follow(self, img):
+        draw_rects(img, [self.head_rect], 2, (0,255,0))
         if self.out:
             self.out_counter += 1
             if self.out_counter > self.out_limit:
@@ -588,14 +623,11 @@ class StateTracker(object):
                 return
             if len(self.rects) == 1:
                 if close_to_edge(self.rects[0]):
-                    self.last_rect = self.rects[0]
-                    #check if it's face?
+                    self.last_rect = self.rects[0] 
             if len(self.rects) == 2:
                 r1_close = close_to_edge(self.rects[0])
                 r2_close = close_to_edge(self.rects[1])
-                if r1_close and r2_close:
-                    self.last_rect = self.pick_better_rect()
-                elif r1_close:
+                if r1_close:
                     self.last_rect = self.rects[0]
                 elif r2_close:
                     self.last_rect = self.rects[1]
@@ -604,30 +636,33 @@ class StateTracker(object):
                 self.last_rect = self.predicted_rect
                 prediction = True
             elif len(self.rects) == 1:
-                dsc_rect = correct_rect(self.rects[0])
-                val = self.dsc.discover(img, dsc_rect)
-                _type = BODY_PARTS[val]
                 if close_to_each_other(self.last_rect, self.rects[0]):
                     self.last_rect = self.smooth_random_motions(self.rects[0])
                 else:
                     if is_far_away(self.last_rect, self.rects[0]):
                         prediction = True
-                    elif is_big_enough(self.rects[0]) and _type != "HEAD":
+                    elif is_big_enough(self.rects[0]):
                         self.last_rect = self.rects[0]
             elif len(self.rects) == 2:
                 #self.rsave.save_hand(img, self.rects[0], self.rects[1])
                 r1_close = close_to_each_other(self.last_rect, self.rects[0])
                 r2_close = close_to_each_other(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
-                    self.last_rect = self.pick_better_rect()
+                    if one_inside_another(self.rects[0], self.head_rect, 2):
+                        self.last_rect = self.rects[1]
+                    elif one_inside_another(self.rects[1], self.head_rect, 2):
+                        self.last_rect = self.rects[0]
                 elif r1_close:
+                    print "r1 blisko"
                     self.last_rect = self.smooth_random_motions(self.rects[0])
                 elif r2_close:
+                    print "r2 blisko"
                     self.last_rect = self.smooth_random_motions(self.rects[1])
                 else:
+                    print "r2 i r1 daleko"
                     self.last_rect = self.predicted_rect 
                     prediction = True
-                    #self.last_rect = self.pick_better_rect()
+        self.analyze_rects(img)
 
         #postprocessing
         if self.check_borders():
@@ -636,8 +671,6 @@ class StateTracker(object):
             return
         self.prediction_limit(prediction)
         self.fit_rect_size()
-        if self.last_rect and self.before_last_rect:
-            print self.last_rect[0] - self.before_last_rect[0], self.last_rect[1] - self.before_last_rect[1]
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
 

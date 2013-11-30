@@ -42,9 +42,9 @@ class Transformer:
         #artificial light 145 - 200 or 6 - 20 / 2-20 ?? or 145-200 + 4 -20
         d = cv2.inRange(h, np.array([145],np.uint8), 
                            np.array([200],np.uint8))
-        #d2 = cv2.inRange(h, np.array([1],np.uint8), 
-        #                    np.array([7],np.uint8))
-        #d = cv2.bitwise_or(d, d2)
+        d2 = cv2.inRange(h, np.array([1],np.uint8), 
+                            np.array([3],np.uint8))
+        d = cv2.bitwise_or(d, d2)
         d = cv2.erode(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)

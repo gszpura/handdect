@@ -3,6 +3,7 @@
 """
 
 import cv2
+from math import sqrt
 
 LATTICE_X = 20
 LATTICE_Y = 20
@@ -30,11 +31,11 @@ def draw_boxes(image, boxes, wide=1):
         x1, y1, x2, y2 = box
         cv2.rectangle(image, (x1, y1), (x2, y2), (255,0,0), wide)
         
-def draw_rects(image, rects, wide=1):
+def draw_rects(image, rects, wide=1, color=(255,0,0)):
     """ draws rects in the image """
     for rect in rects:
         x,y,w,h = rect
-        cv2.rectangle(image, (x, y), (x+w, y+h), (255,0,0), wide)
+        cv2.rectangle(image, (x, y), (x+w, y+h), color, wide)
         
 def draw_circles(img, positions, r=20):
     for pos in positions:
@@ -75,8 +76,71 @@ def is_big_enough(rect1):
     if w1*h1 >= 9600:
         return True
     return False
-    
-    
+
+def average_rect(rect1, rect2):
+    x = (4*rect1[0] + rect2[0])/5
+    y = (4*rect1[1] + rect2[1])/5
+    w = (4*rect1[2] + rect2[2])/5
+    h = (4*rect1[3] + rect2[3])/5
+    return [x,y,w,h]
+
+
+def average_queue(queue):
+    x = 0
+    y = 0
+    w = 0
+    h = 0
+    for rect in queue:
+        x += rect[0]
+        y += rect[1]
+        w += rect[2]
+        h += rect[3]
+    l = len(queue)
+    return [x/l, y/l, w/l, h/l]
+
+def is_near_rect(reference, rect):
+    x,y,w,h = reference
+    xr, yr, wr, hr = rect
+    cx = xr + wr/2
+    cy = yr + hr/2
+    ext = 150
+    if cx > x and cx < x + w and cy > y - 20  and cy < y + w + ext:
+        return True
+    return False
+
+def correct_rect(rect):
+    xt,yt,wt,ht = rect
+    rect = list(rect)
+    if wt*ht < 4000:
+        r0 = (rect[0] - 40) > 0 and (rect[0] - 40) or 0
+        r1 = (rect[1] - 40) > 0 and (rect[1] - 40) or 0
+        rect[0] = r0
+        rect[1] = r1
+        rect[2] = rect[2] + 80
+        rect[3] = rect[3] + 80
+    elif wt*ht < 13000:
+        rect[3] += 50
+        r0 = (rect[0] - 30) > 0 and (rect[0] - 30) or 0
+        rect[0] = 0
+        rect[2] = rect[2] + 60
+    if rect[2] > 1.25*rect[3]:
+        rect[3] = rect[3] + 60
+    if rect[0] < 0:
+        rect[0] = 0
+    if rect[1] < 0:
+        rect[1] = 0
+    return tuple(rect)
+
+def distance_between_rects(rect1, rect2):
+    cx1 = rect1[0] + rect1[2]/2
+    cy1 = rect1[1] + rect1[3]/2
+
+    cx2 = rect2[0] + rect2[2]/2
+    cy2 = rect2[1] + rect2[3]/2
+    distance = sqrt((cx2 - cx1)**2 + (cy2 - cy1)**2)
+    return distance
+
+
 def one_inside_another(current, previous, ratio=3, rigid=False):
     """
         Checks if rect 'current' is inside rect 'previous'.

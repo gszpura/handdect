@@ -32,6 +32,7 @@ class ShapeDiscovery(object):
 		self.rect1_score = 0
 		self.rect2_score = 0
 		self.light = light
+		self.current_img = None
 
 
 	def discover(self, img, rect=None):
@@ -68,10 +69,22 @@ class ShapeDiscovery(object):
 		rect = cv2.boundingRect(cnt)
 		return int(rect[2]/float(2))
 
+	def is_real(self):
+		roi = self.current_img
+		if roi is None:
+			return False
+		w, h = roi.shape
+		all_pixels = 20*w
+		part_of_roi = roi[h/4:3*h/4,:]
+		amount = cv2.countNonZero(part_of_roi)
+		if amount > 0.05*all_pixels:
+			return True
+		else:
+			return False
 
 	def smart_filter(self, hch, semi):
 		h1 = cv2.inRange(hch, np.array([1],np.uint8), 
-                       		 np.array([7],np.uint8))
+                       		 np.array([2],np.uint8))
 		h2 = cv2.inRange(hch, np.array([145],np.uint8), 
                        		 np.array([200],np.uint8))
 		hch = cv2.bitwise_or(h1, h2)
@@ -91,8 +104,8 @@ class ShapeDiscovery(object):
 	def apply_hsv_transformation(self, roi):
 		hsv1 = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 		h1,s1,v1 = cv2.split(hsv1)
-		HSV_1_D = 145
-		HSV_1_UP = 200
+		HSV_1_D = 120
+		HSV_1_UP = 190
 		HSV_2_D = 4
 		HSV_2_UP = 20
 		hdown = cv2.inRange(h1, np.array([HSV_1_D],np.uint8), 
@@ -105,23 +118,29 @@ class ShapeDiscovery(object):
 		h = cv2.medianBlur(h, 3)
 		contours, hier = cv2.findContours(h, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 		contour = self.biggest_cnt(contours)
+		if contour == None:
+			return None
 		c1 = cv2.approxPolyDP(contour, 5, True)
 		h1 = np.zeros(h.shape, np.uint8)
 		cv2.drawContours(h1,[c1],-1,(255,0,0),-1)
+		self.current_img = h1
+		#cv2.imshow('h1', h1)
 		return h1
 
 	def apply_value_threshold_transformation(self, roi):
 		hsv1 = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-		if hsv1 is None:
-			print roi
 		h1,s1,v1 = cv2.split(hsv1)
-		dummy, v1 = cv2.threshold(v1, 160, 255, cv2.THRESH_BINARY)
+		dummy, v1 = cv2.threshold(v1, 110, 255, cv2.THRESH_BINARY)
 		c1, hier = cv2.findContours(v1, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 		c1 = self.biggest_cnt(c1)
+		if c1 == None:
+			return None
 		c1 = cv2.approxPolyDP(c1, 5, True)
 		v1 = np.zeros(v1.shape, np.uint8)
 		cv2.drawContours(v1,[c1],-1,(255,0,0),-1)
 		v1 = self.smart_filter(h1, v1)
+		self.current_img = v1
+		#cv2.imshow('h1', v1)
 		return v1
 
 	def _change_bgr_to_gray(self):
@@ -164,5 +183,5 @@ def main2():
 	print time.time() - a
 	print value
 
-main1()
+#main1()
 #main2()

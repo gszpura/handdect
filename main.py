@@ -73,7 +73,7 @@ def mainSubHSV():
 		
     cv2.destroyAllWindows()
     c.release()
-    
+
     
     
 if __name__ == "__main__":

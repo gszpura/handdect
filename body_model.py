@@ -344,7 +344,6 @@ class BodyPartsModel(object):
 
 	def process(self):
 		if self.has_not_enough_information():
-			print "NOT ENOUGH"
 			return self.outcome
 		vleafs = self.get_vertical_leafs()
 		leafs = self.get_leafs()
