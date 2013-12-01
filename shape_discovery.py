@@ -40,8 +40,8 @@ class ShapeDiscovery(object):
 			return
 		x,y,w,h = rect
 		roi = img[y:y+h, x:x+w]
-		roi_trf = self.apply_hsv_transformation(roi)
-		#roi_trf = self.apply_value_threshold_transformation(roi)
+		#roi_trf = self.apply_hsv_transformation(roi)
+		roi_trf = self.apply_value_threshold_transformation(roi)
 		bpm = BodyPartsModel(roi_trf)
 		return bpm.get_value()
 
@@ -165,7 +165,7 @@ class ShapeDiscovery(object):
 		except Exception, a:
 			print a
 
-	def convex_cue(self):
+	def additional_informations(self):
 		pass
 
 

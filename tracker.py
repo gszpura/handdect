@@ -1,18 +1,15 @@
 """
-    Trackery, ktore wspolpracuja z background.py
-    Najnowszy tracker do swiatla dziennego:
-        TrackerNext
-        TODO: 
-        * aproksymacja kilku bounding boxow
-            - wez najwiekszy, jesli jest w poblizu kilka innych to polacz
-            - jesli kolo najwiekszego nie ma innych moze mozna przeskoczyc na inny
-        * predykcja ruchu i wyznaczanie boxow z prawdopodobienstwem     
+    Trackery:
+        -> TrackerNext dla HAAR
+        -> StateTracker dla bgr substraction + HSV
 
-    StateTracker TODO:
-    - rozwiazac sporadycznie pojawiajace sie problemy z przechodzeniem reki nad twarza/wyrzucaniem sie aplikacji
-    - napisac od nowa BodyPartsModel
-    - convectivyDefects
+    TODO aplikacji:
+    - rozwiazac sporadycznie pojawiajace sie problemy z przeskakiwaniem reki na twarz
+    - convectivyDefects: jestli brak wiekszych w FACE to oznacza, ze to PALM
     - kalibracja
+    - przepisac do cythona
+    - HAAR
+    - porownania i testy
 """
 
 
