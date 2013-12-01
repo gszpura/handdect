@@ -40,8 +40,8 @@ class ShapeDiscovery(object):
 			return
 		x,y,w,h = rect
 		roi = img[y:y+h, x:x+w]
-		#roi_trf = self.apply_hsv_transformation(roi)
-		roi_trf = self.apply_value_threshold_transformation(roi)
+		roi_trf = self.apply_hsv_transformation(roi)
+		#roi_trf = self.apply_value_threshold_transformation(roi)
 		bpm = BodyPartsModel(roi_trf)
 		return bpm.get_value()
 
@@ -84,7 +84,7 @@ class ShapeDiscovery(object):
 
 	def smart_filter(self, hch, semi):
 		h1 = cv2.inRange(hch, np.array([1],np.uint8), 
-                       		 np.array([2],np.uint8))
+                       		 np.array([7],np.uint8))
 		h2 = cv2.inRange(hch, np.array([145],np.uint8), 
                        		 np.array([200],np.uint8))
 		hch = cv2.bitwise_or(h1, h2)
@@ -130,7 +130,7 @@ class ShapeDiscovery(object):
 	def apply_value_threshold_transformation(self, roi):
 		hsv1 = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 		h1,s1,v1 = cv2.split(hsv1)
-		dummy, v1 = cv2.threshold(v1, 110, 255, cv2.THRESH_BINARY)
+		dummy, v1 = cv2.threshold(v1, 90, 255, cv2.THRESH_BINARY)
 		c1, hier = cv2.findContours(v1, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 		c1 = self.biggest_cnt(c1)
 		if c1 == None:

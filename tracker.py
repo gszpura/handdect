@@ -25,8 +25,10 @@ from main_utils import draw_circles, \
     draw_rects, \
     close_to_edge, \
     close_to_each_other, \
+    close_to_each_other_central, \
     is_far_away, \
-    is_big_enough, \
+    not_close, \
+    combine_rects, \
     one_inside_another, \
     CFG_HEIGHT, CFG_WIDTH, \
     draw_circles, \
@@ -34,7 +36,8 @@ from main_utils import draw_circles, \
     average_queue, \
     is_near_rect, \
     correct_rect, \
-    distance_between_rects
+    distance_between_rects, \
+    further_from_rect
 from shape_discovery import ShapeDiscovery
 
 
@@ -409,10 +412,11 @@ class StateTracker(object):
     
     def __init__(self):
         self.clear()
-        self.out_limit = 20
+        self.out_limit = 10
         self.rsave = RectSaver()
         self.dsc = ShapeDiscovery()
         self.head_rect = [200, 200, 0, 0]
+        self.special = None
 
     def clear(self):
         self.last_rect = None
@@ -551,21 +555,32 @@ class StateTracker(object):
         if self.last_rect is None:
             return
         self.last_rect = list(self.last_rect)
-        #jezeli dwa boxy na siebie nachodza to natnij box reki
-        #x+w > xg ale x < xg
-        #x < xg + wg ale x+w > xg + wg
         x,y,w,h = self.last_rect
         hx,hy,hw,hh = self.head_rect
-        primary_condition_x = x + w > hx and x < hx
-        primary_condition_y = y + h > hy and y < hy
-        if primary_condition_x and w > 300:
+        x_left = x + w > hx and x < hx
+        x_right = x < hx + hw and x + w > hx + hw
+        y_up = y + h > hy and y < hy
+        y_down = y < hy + hh and y + h > hy + hh
+        
+        if x_left and w > 260 and self.average_dxy[0] < 0:
             diff = x + w - hx
             self.last_rect[2] = w - diff/2
-            self.last_rect[0] = x + diff/2
-        if primary_condition_y and primary_condition_x and h > 300:
+        if x_left and w > 260 and self.average_dxy[0] < -20:
+            self.last_rect[0] = x - diff/4
+
+        if x_right and w > 260 and self.average_dxy[0] > 0:
+            diff = hx + hw - x
+            self.last_rect[0] = x + diff/4
+            self.last_rect[2] = w - diff/4
+
+        if y_up and x_left and h > 300 and self.average_dxy[1] < 0:
             diff = y + h - hy
-            self.last_rect[1] = y + diff/3
-            self.last_rect[3] = h - 2*diff/3
+            self.last_rect[3] = h - diff/4
+        
+        if y_down and x_right and h > 300:
+            diff = hy + hh - y
+            #self.last_rect[1] = y + diff/4
+
         if self.last_rect[3] > CFG_HEIGHT/1.5:
             self.last_rect[3] = int(self.last_rect[3]/1.5)
 
@@ -579,7 +594,6 @@ class StateTracker(object):
             dsc_rect = correct_rect(self.rects[0])
             val = self.dsc.discover(img, dsc_rect)
             _type = BODY_PARTS[val]
-        print _type, #####################
 
         is_real = self.dsc.is_real()
         if len(self.rects) == 0:
@@ -606,9 +620,25 @@ class StateTracker(object):
             else:
                 self.is_not_real_counter += 1
 
+    def _one_rect_operations(self, rect):
+        if close_to_each_other(self.last_rect, rect):
+            self.last_rect = self.smooth_random_motions(rect)
+        else:
+            if is_far_away(self.last_rect, rect):
+                if close_to_each_other(rect, self.head_rect):
+                    pass
+                elif rect[2]*rect[3]*4 <= self.last_rect[2]*self.last_rect[3]:
+                    self.last_rect = combine_rects(self.last_rect, rect)
+                else:
+                    self.last_rect = rect
+            elif rect[2]*rect[3]*4 <= self.last_rect[2]*self.last_rect[3]:
+                self.last_rect = combine_rects(self.last_rect, rect)
+            elif not close_to_each_other_central(rect, self.head_rect):
+                self.last_rect = rect
 
     def follow(self, img):
         draw_rects(img, [self.head_rect], 2, (0,255,0))
+        #draw_rects(img, self.rects, 1, (0,255,255))
         if self.out:
             self.out_counter += 1
             if self.out_counter > self.out_limit:
@@ -633,37 +663,62 @@ class StateTracker(object):
                     self.last_rect = self.rects[1]
         else:
             if len(self.rects) == 0:
-                self.last_rect = self.predicted_rect
+                #self.last_rect = self.predicted_rect
                 prediction = True
             elif len(self.rects) == 1:
+                print "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
                 if close_to_each_other(self.last_rect, self.rects[0]):
                     self.last_rect = self.smooth_random_motions(self.rects[0])
                 else:
                     if is_far_away(self.last_rect, self.rects[0]):
-                        prediction = True
-                    elif is_big_enough(self.rects[0]):
+                        if close_to_each_other(self.rects[0], self.head_rect):
+                            prediction = True
+                        elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
+                            print "TTTTTTTTTTTTTTTT"
+                            self.last_rect = combine_rects(self.last_rect, self.rects[0])
+                        else:
+                            print "MMMMMMMMMMMMMMMMM"
+                            self.last_rect = self.rects[0]
+                    elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
+                        print "CCCCCCCCCCCCCCCCCCC"
+                        self.last_rect = combine_rects(self.last_rect, self.rects[0])
+                    else:
                         self.last_rect = self.rects[0]
+
             elif len(self.rects) == 2:
-                #self.rsave.save_hand(img, self.rects[0], self.rects[1])
-                r1_close = close_to_each_other(self.last_rect, self.rects[0])
-                r2_close = close_to_each_other(self.last_rect, self.rects[1])
+                print "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+                r1_close = close_to_each_other_central(self.last_rect, self.rects[0])
+                r2_close = close_to_each_other_central(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
                     if one_inside_another(self.rects[0], self.head_rect, 2):
                         self.last_rect = self.rects[1]
                     elif one_inside_another(self.rects[1], self.head_rect, 2):
                         self.last_rect = self.rects[0]
                 elif r1_close:
-                    print "r1 blisko"
-                    self.last_rect = self.smooth_random_motions(self.rects[0])
+                    self._one_rect_operations(self.rects[0])
                 elif r2_close:
-                    print "r2 blisko"
-                    self.last_rect = self.smooth_random_motions(self.rects[1])
+                    print "ZZZZZZZZZZZZZZZZZZZZZZZZ"
+                    self._one_rect_operations(self.rects[1])
                 else:
-                    print "r2 i r1 daleko"
-                    self.last_rect = self.predicted_rect 
+                    print "-----------------------------------------------------????"
+                    r1_close = False
+                    r2_close = False
+                    if self.predicted_rect is not None:
+                         r1_close = close_to_each_other_central(self.predicted_rect, self.rects[0])
+                         r2_close = close_to_each_other_central(self.predicted_rect, self.rects[1])
+                    if r1_close and not r2_close:
+                        self.last_rect = self.rects[0]
+                    elif r2_close and not r1_close:
+                        self.last_rect = self.rects[1]
+                    elif not r1_close and not r2_close:
+                        print "))))))))))))))))))))))))))))))))))))))))))))"
+                        rect = further_from_rect(self.head_rect, self.rects[0], self.rects[1])
+                        if not close_to_each_other_central(rect, self.head_rect):
+                            self.last_rect = rect
                     prediction = True
         self.analyze_rects(img)
-
+        if self.special is not None:
+            draw_rects(img, [self.special], 1, (255,255,0))
         #postprocessing
         if self.check_borders():
             self.clear()

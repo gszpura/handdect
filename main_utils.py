@@ -62,6 +62,13 @@ def close_to_each_other(rect1, rect2):
         return True
     return False
     
+def close_to_each_other_central(rect1, rect2):
+    x1,y1,w1,h1 = rect1
+    x2,y2,w2,h2 = rect2
+    if abs( (x2+w2/2) - (x1+w1/2) ) <= CFG_DX and abs( (y2+h2/2) - (y1+h1/2)) <= CFG_DY:
+        return True
+    return False
+
 def is_far_away(rect1, rect2):
     x1,y1,w1,h1 = rect1
     x2,y2,w2,h2 = rect2
@@ -71,11 +78,22 @@ def is_far_away(rect1, rect2):
         return True
     return False
     
-def is_big_enough(rect1):
+def not_close(rect1, rect2):
     x1,y1,w1,h1 = rect1
-    if w1*h1 >= 9600:
+    x2,y2,w2,h2 = rect2
+    if x1 + w1 < x2 or x1 > x2 + w2 or y1 + h1 < y2 or y1 > y2 + h2:
         return True
     return False
+
+
+def combine_rects(last, to_merge):
+    x1,y1,w1,h1 = last
+    x2,y2,w2,h2 = to_merge
+    x = int(0.6*x1 + 0.4*x2)
+    y = int(0.6*y1 + 0.4*y2)
+    w = int(0.7*w1 + 0.3*w2)
+    h = int(0.7*h1 + 0.3*h2)
+    return (x1, y1, max(70, w), max(80, h))
 
 def average_rect(rect1, rect2):
     x = (4*rect1[0] + rect2[0])/5
@@ -139,6 +157,16 @@ def distance_between_rects(rect1, rect2):
     cy2 = rect2[1] + rect2[3]/2
     distance = sqrt((cx2 - cx1)**2 + (cy2 - cy1)**2)
     return distance
+
+def further_from_rect(rectx, rect1, rect2):
+    d1 = distance_between_rects(rectx, rect1)
+    d2 = distance_between_rects(rectx, rect2)
+    print d2, d1, "DDD"
+    print rect2, rect1
+    print rectx
+    if d2 > d1:
+        return rect2
+    return rect1
 
 
 def one_inside_another(current, previous, ratio=3, rigid=False):
