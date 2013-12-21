@@ -13,6 +13,10 @@ class Transformer:
         self.element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
         self.width = width
         self.height = height
+        self.hsv = [1, 2, 145, 200]
+
+    def set_color_ranges(self, color_ranges):
+        self.hsv = color_ranges
         
     def smart_and(self, fst, sec):
         result = np.zeros((self.height, self.width), np.uint8)
@@ -38,10 +42,10 @@ class Transformer:
         result = np.zeros((img.shape[0], img.shape[1]), np.uint8)
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h,s,v = cv2.split(img_hsv)
-        d = cv2.inRange(h, np.array([145],np.uint8), 
-                           np.array([200],np.uint8))
-        d2 = cv2.inRange(h, np.array([1],np.uint8), 
-                            np.array([2],np.uint8))
+        d = cv2.inRange(h, np.array(self.hsv[2], np.uint8), 
+                           np.array(self.hsv[3], np.uint8))
+        d2 = cv2.inRange(h, np.array(self.hsv[0], np.uint8), 
+                            np.array(self.hsv[1], np.uint8))
         d = cv2.bitwise_or(d, d2)
         d = cv2.erode(d, element)
         d = cv2.dilate(d, element)

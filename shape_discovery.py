@@ -23,7 +23,7 @@ class HandInfo(object):
 
 class ShapeDiscovery(object):
 
-	def __init__(self, light="Daylight"):
+	def __init__(self, light="Night"):
 		self.rects = []
 		self.last = None
 		self.img = None
@@ -33,15 +33,24 @@ class ShapeDiscovery(object):
 		self.rect2_score = 0
 		self.light = light
 		self.current_img = None
+		self.hsv_range = [1, 2, 145, 200]
+		self.threshold = 100
 
+	def set_color_range(self, color_range):
+		self.hsv_range = color_range
+
+	def set_threshold(self, threshold):
+		self.threshold = threshold
 
 	def discover(self, img, rect=None):
 		if rect == None:
 			return
 		x,y,w,h = rect
 		roi = img[y:y+h, x:x+w]
-		#roi_trf = self.apply_hsv_transformation(roi)
-		roi_trf = self.apply_value_threshold_transformation(roi)
+		if self.light == "Day":
+			roi_trf = self.apply_hsv_transformation(roi)
+		else:
+			roi_trf = self.apply_value_threshold_transformation(roi)
 		bpm = BodyPartsModel(roi_trf)
 		return bpm.get_value()
 
@@ -54,20 +63,6 @@ class ShapeDiscovery(object):
 				biggest = cnt
 				biggest_area = m["m00"]
 		return biggest
-
-	def center_of_mass(self, cnt):
-		m = cv2.moments(cnt)
-		try:
-			x = int(m["m10"]/m["m00"])
-			y = int(m["m01"]/m["m00"])
-		except ZeroDivisionError:
-			x = -1
-			y = -1
-		return x, y 
-
-	def radius(self, cnt):
-		rect = cv2.boundingRect(cnt)
-		return int(rect[2]/float(2))
 
 	def is_real(self):
 		roi = self.current_img
@@ -108,10 +103,10 @@ class ShapeDiscovery(object):
 		HSV_1_UP = 190
 		HSV_2_D = 4
 		HSV_2_UP = 20
-		hdown = cv2.inRange(h1, np.array([HSV_1_D],np.uint8), 
-                       		 np.array([HSV_1_UP],np.uint8))
-		hup = cv2.inRange(h1, np.array([HSV_2_D],np.uint8), 
-                        	 np.array([HSV_2_UP],np.uint8))
+		hdown = cv2.inRange(h1, np.array(self.hsv_range[0], np.uint8), 
+                       		 np.array(self.hsv_range[1], np.uint8))
+		hup = cv2.inRange(h1, np.array(self.hsv_range[2], np.uint8), 
+                        	 np.array(self.hsv_range[3], np.uint8))
 		h = cv2.bitwise_or(hdown, hup)
 		h = cv2.dilate(h, self.element)
 		h = cv2.dilate(h, self.element)
@@ -130,7 +125,7 @@ class ShapeDiscovery(object):
 	def apply_value_threshold_transformation(self, roi):
 		hsv1 = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 		h1,s1,v1 = cv2.split(hsv1)
-		dummy, v1 = cv2.threshold(v1, 90, 255, cv2.THRESH_BINARY)
+		dummy, v1 = cv2.threshold(v1, self.threshold, 255, cv2.THRESH_BINARY)
 		c1, hier = cv2.findContours(v1, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 		c1 = self.biggest_cnt(c1)
 		if c1 == None:

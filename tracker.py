@@ -407,11 +407,13 @@ class TrackerNext:
 
 class StateTracker(object):
     
-    def __init__(self):
+    def __init__(self, light, color_range, threshold):
         self.clear()
         self.out_limit = 10
         self.rsave = RectSaver()
-        self.dsc = ShapeDiscovery()
+        self.dsc = ShapeDiscovery(light)
+        self.dsc.set_color_range(color_range)
+        self.dsc.set_threshold(threshold)
         self.head_rect = [200, 200, 0, 0]
         self.special = None
 
@@ -663,7 +665,7 @@ class StateTracker(object):
                 #self.last_rect = self.predicted_rect
                 prediction = True
             elif len(self.rects) == 1:
-                print "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
+                #print "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
                 if close_to_each_other(self.last_rect, self.rects[0]):
                     self.last_rect = self.smooth_random_motions(self.rects[0])
                 else:
@@ -671,19 +673,19 @@ class StateTracker(object):
                         if close_to_each_other(self.rects[0], self.head_rect):
                             prediction = True
                         elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
-                            print "TTTTTTTTTTTTTTTT"
+                            #print "TTTTTTTTTTTTTTTT"
                             self.last_rect = combine_rects(self.last_rect, self.rects[0])
                         else:
-                            print "MMMMMMMMMMMMMMMMM"
+                            #print "MMMMMMMMMMMMMMMMM"
                             self.last_rect = self.rects[0]
                     elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
-                        print "CCCCCCCCCCCCCCCCCCC"
+                        #print "CCCCCCCCCCCCCCCCCCC"
                         self.last_rect = combine_rects(self.last_rect, self.rects[0])
                     else:
                         self.last_rect = self.rects[0]
 
             elif len(self.rects) == 2:
-                print "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+                #print "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
                 r1_close = close_to_each_other_central(self.last_rect, self.rects[0])
                 r2_close = close_to_each_other_central(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
@@ -694,10 +696,10 @@ class StateTracker(object):
                 elif r1_close:
                     self._one_rect_operations(self.rects[0])
                 elif r2_close:
-                    print "ZZZZZZZZZZZZZZZZZZZZZZZZ"
+                    #print "ZZZZZZZZZZZZZZZZZZZZZZZZ"
                     self._one_rect_operations(self.rects[1])
                 else:
-                    print "-----------------------------------------------------????"
+                    #print "-----------------------------------------------------????"
                     r1_close = False
                     r2_close = False
                     if self.predicted_rect is not None:
@@ -708,7 +710,7 @@ class StateTracker(object):
                     elif r2_close and not r1_close:
                         self.last_rect = self.rects[1]
                     elif not r1_close and not r2_close:
-                        print "))))))))))))))))))))))))))))))))))))))))))))"
+                        #print "))))))))))))))))))))))))))))))))))))))))))))"
                         rect = further_from_rect(self.head_rect, self.rects[0], self.rects[1])
                         if not close_to_each_other_central(rect, self.head_rect):
                             self.last_rect = rect

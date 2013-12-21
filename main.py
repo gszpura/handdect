@@ -3,7 +3,7 @@ Methods:
 * Background substraction + HSV
 * HAAR cascades
 
-Last updated: 26-10-2013
+Last updated: 10-12-2013
 """
 import cv2
 import os
@@ -15,6 +15,7 @@ from transformer import Transformer
 from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
 from main_utils import draw_boxes
+from calibration import Calibration
 
 
 #global init
@@ -46,13 +47,28 @@ def mainCascades():
             break   
     cv2.destroyAllWindows()
     c.release()
-    
-#version with Substraction and HSV detection
-def mainSubHSV():
-    track = StateTracker()
-    trf = Transformer()
 
-    while(1):    
+#version with Substraction and HSV detection
+CFG_HSV = [1, 2, 145, 200]
+CFG_THR = 90
+LIGHT = "Night"
+
+def mainSubHSV():
+    clbr = Calibration()
+
+    #while (not clbr.end):
+    #    _,f = c.read()
+    #    clbr.update(f)
+    #print clbr.best_conf
+    #print clbr.final_threshold
+    #print clbr.light
+    LIGHT = "Night" #clbr.light
+    CFG_HSV = [1, 2, 145, 190] #clbr.best_conf
+    CFG_THR = 90 #clbr.final_threshold
+    track = StateTracker(LIGHT, CFG_HSV, CFG_THR)
+    trf = Transformer()
+    trf.set_color_ranges(CFG_HSV)
+    while (1):    
         _,f = c.read()
         st = time.time()
         move_cue = trf.move_cue(f)
@@ -61,7 +77,7 @@ def mainSubHSV():
         #final = trf.postprocess(final)
         track.update(final)
         track.follow(f)
-        print time.time() - st
+        #print time.time() - st
         cv2.imshow('IMG', f)
         cv2.imshow('IMG2', final)
         k = cv2.waitKey(20)	
