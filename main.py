@@ -59,16 +59,14 @@ def mainSubHSV():
     while (not clbr.end):
         _,f = c.read()
         clbr.update(f)
-    print clbr.best_conf
-    print clbr.thr
-    print clbr.light
-    LIGHT = "Night" #clbr.light
+    print clbr.best_conf, clbr.thr, clbr.light, "*******&&&&&&"
+    LIGHT = clbr.light
     CFG_HSV = clbr.best_conf
     CFG_THR = clbr.thr
     track = StateTracker(LIGHT, CFG_HSV, CFG_THR)
-    trf = Transformer()
+    trf = Transformer(LIGHT)
     trf.set_color_ranges(CFG_HSV)
-    while (1):    
+    while (1):
         _,f = c.read()
         st = time.time()
         move_cue = trf.move_cue(f)
@@ -80,13 +78,13 @@ def mainSubHSV():
         #print time.time() - st
         cv2.imshow('IMG', f)
         cv2.imshow('IMG2', final)
-        k = cv2.waitKey(20)	
-        if k == 113: #q 
+        k = cv2.waitKey(20)
+        if k == 113: #q
             shot = True
         if k == 27:
             break
-    
-		
+
+
     cv2.destroyAllWindows()
     c.release()
 

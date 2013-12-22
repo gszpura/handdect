@@ -31,6 +31,8 @@ class ShapeDiscovery(object):
 		self.debug = True
 		self.rect1_score = 0
 		self.rect2_score = 0
+		if light == "DayDim":
+			light = "Day"
 		self.light = light
 		self.current_img = None
 		self.hsv_range = [1, 2, 145, 200]

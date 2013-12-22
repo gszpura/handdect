@@ -8,9 +8,10 @@ absd = cv2.absdiff
 
 class Transformer:
 
-    def __init__(self, height=480, width=640):
+    def __init__(self, light="Day", height=480, width=640):
         self.last = np.zeros((height, width), np.uint8)
         self.element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+        self.light = light
         self.width = width
         self.height = height
         self.hsv = [1, 2, 145, 200]
@@ -35,10 +36,45 @@ class Transformer:
                     result[j*h:(j+1)*h, i*w:(i+1)*w] = 255
         return result
         
-        
-    def skin_color_cue(self, img):
+    def _morpho_day(self, img):
         element = self.element
+        # Day morpho: erode, 4xdilate or 2xerode, 4xdilate
+        d = cv2.erode(img, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        return d
 
+    def _morpho_daydim(self, img):
+        element = self.element
+        d = cv2.dilate(img, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        return d
+
+    def _morpho_night(self, img):
+        element = self.element
+        # 2x erode
+        d = cv2.erode(img, element)
+        d = cv2.erode(d, element)
+        # dilate
+        d = cv2.dilate(d, element)
+        # erode
+        d = cv2.erode(d, element)
+        # dilate
+        d = cv2.dilate(d, element)
+        # 3x erode
+        d = cv2.erode(d, element)
+        d = cv2.erode(d, element)
+        d = cv2.erode(d, element)
+        # 3x dilate
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        return d
+
+    def skin_color_cue(self, img):
         result = np.zeros((img.shape[0], img.shape[1]), np.uint8)
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h,s,v = cv2.split(img_hsv)
@@ -48,19 +84,12 @@ class Transformer:
                             np.array(self.hsv[1], np.uint8))
         a = time.time()
         d = cv2.bitwise_or(d, d2)
-        d = cv2.erode(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        # Night morpho: 2xerode, dilate, erode, dilate, 3xerode, 3xdilate
-        # Day morpho: erode, 4xdilate or 2xerode, 4xdilate
+        if self.light == "Night":
+            d = self._morpho_night(d)
+        elif self.light == "Day":
+            d = self._morpho_day(d)
+        elif self.light == "DayDim":
+            d = self._morpho_daydim(d)
         print time.time() - a
         result = d
         

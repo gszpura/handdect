@@ -31,16 +31,23 @@ def get_ranges(hist):
 
     current = rngs[0]
     values = [rngs[0]]
+    cnt = 0
     for i in range(1, len(rngs)):
-        if rngs[i] <= current + 2 or (rngs[i] > 120 and rngs[i] <= current + 6):
+        if (rngs[i] <= current + 2) or \
+           (rngs[i] > 120 and rngs[i] <= current + 6):
             current = rngs[i]
+            cnt += 1
         else:
+            if cnt == 0:
+                values.append(rngs[i])
+                cnt = 0
+                continue
             values.append(current)
             values.append(rngs[i])
             current = rngs[i]
+            cnt = 0
     if current == rngs[-1]:
         values.append(current)
-
     if len(values) > 4:
         values = values[:4]
     if len(values) == 2:
@@ -49,18 +56,29 @@ def get_ranges(hist):
 
 
 def clean_conf(conf):
-    if conf[0] < 3:
+    # near zero changes
+    if conf[0] < 3 and conf[1] <= 15:
         conf[0] = 1
         if conf[1] > 3:
             conf[1] = 2
-    if conf[2] > 160:
-        conf[2] = 160
-    if conf[2] < 120:
+    if conf[1] > 35:
+        conf[1] = 35
+
+    # daylight changes
+    if 36 < conf[3] < 80:
+        conf[3] = 36 
+    if 36 < conf[2] < 80:
+        conf[2] = 36
+
+    # night changes
+    if 150 < conf[2] < 190:
+        conf[2] = 150
+    if 80 < conf[2] < 120:
         conf[2] = 120
-    if conf[3] < 190:
+    if 80 < conf[3] < 190:
         conf[3] = 190
-    if conf[3] > 205:
-        conf[3] = 205
+    if 200 < conf[3] < 255:
+        conf[3] = 200
     return conf
 
 class Calibration2(object):
@@ -73,7 +91,7 @@ class Calibration2(object):
 
         self.best_conf = [1, 2, 3, 4]
         self.thr = 90
-        self.light = "Day"
+        self.light = "Day" #or "Night" or "DayDim"
 
         self.last = np.zeros((height, width), np.uint8)
         self.end = 0
@@ -99,6 +117,15 @@ class Calibration2(object):
         cnt2 = np.array([p for p in cnt2 if p[0][1] < y2])
         return cnt2
 
+    def discover_light(self):
+        conf = self.best_conf
+        if conf[0] < 3 and conf[1] < 3:
+            self.light = "Night"
+        elif conf[1] <= 30 and conf[3] <= 30:
+            self.light = "DayDim"
+        else:
+            self.light = "Day"
+
     def update(self, img):
         hsv1 = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h1,s1,v1 = cv2.split(hsv1)
@@ -110,6 +137,8 @@ class Calibration2(object):
         if cnt is not None:
             cnt = self.cut_the_crap(cnt)
             self.rect = list(cv2.boundingRect(cnt))
+            draw_rects(v1, [self.rect], color=(100,0,0))
+            # cv2.imshow('otsu', v1)
             roi = get_roi(orig, self.rect)
             mask = get_roi(v1, self.rect)
             hist = cv2.calcHist([roi], [0], mask, [256], [0,256])
@@ -117,6 +146,7 @@ class Calibration2(object):
             conf = get_ranges(hist)
             print "*",
             self.best_conf = clean_conf(conf)
+            self.discover_light()
             self.cnt += 1
         if self.cnt >= self.cnt_max:
             self.end = 1
@@ -149,13 +179,13 @@ def test_main():
         if k == 27:
             break
         cnt += 1
-        if cnt > 200:
+        if cnt > 20:
             break
     print clbr.best_conf
     print clbr.thr
     print clbr.light
     LIGHT = "Night" #clbr.light
-    CFG_HSV = clbr.best_conf #[4,20,145,200] #
+    CFG_HSV = clbr.best_conf #[1,30,120,190] 
     CFG_THR = clbr.thr
 
     while True:
@@ -170,4 +200,4 @@ def test_main():
     c.release()
 
 
-test_main()
+#test_main()
