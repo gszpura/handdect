@@ -16,6 +16,7 @@ from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
 from main_utils import draw_boxes
 from calibration import Calibration
+from calibration2 import Calibration2
 
 
 #global init
@@ -54,17 +55,16 @@ CFG_THR = 90
 LIGHT = "Night"
 
 def mainSubHSV():
-    clbr = Calibration()
-
-    #while (not clbr.end):
-    #    _,f = c.read()
-    #    clbr.update(f)
-    #print clbr.best_conf
-    #print clbr.final_threshold
-    #print clbr.light
+    clbr = Calibration2()
+    while (not clbr.end):
+        _,f = c.read()
+        clbr.update(f)
+    print clbr.best_conf
+    print clbr.thr
+    print clbr.light
     LIGHT = "Night" #clbr.light
-    CFG_HSV = [1, 2, 145, 190] #clbr.best_conf
-    CFG_THR = 90 #clbr.final_threshold
+    CFG_HSV = clbr.best_conf
+    CFG_THR = clbr.thr
     track = StateTracker(LIGHT, CFG_HSV, CFG_THR)
     trf = Transformer()
     trf.set_color_ranges(CFG_HSV)

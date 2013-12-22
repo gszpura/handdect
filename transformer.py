@@ -46,12 +46,22 @@ class Transformer:
                            np.array(self.hsv[3], np.uint8))
         d2 = cv2.inRange(h, np.array(self.hsv[0], np.uint8), 
                             np.array(self.hsv[1], np.uint8))
+        a = time.time()
         d = cv2.bitwise_or(d, d2)
+        d = cv2.erode(d, element)
+        d = cv2.erode(d, element)
+        d = cv2.dilate(d, element)
+        d = cv2.erode(d, element)
+        d = cv2.dilate(d, element)
+        d = cv2.erode(d, element)
+        d = cv2.erode(d, element)
         d = cv2.erode(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
+        # Night morpho: 2xerode, dilate, erode, dilate, 3xerode, 3xdilate
+        # Day morpho: erode, 4xdilate or 2xerode, 4xdilate
+        print time.time() - a
         result = d
         
         cv2.imshow('SKIN CUE', result)
