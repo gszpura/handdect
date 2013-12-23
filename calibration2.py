@@ -13,72 +13,89 @@ def get_roi(img, rect):
     roi = img[y:y+h, x:x+w]
     return roi
 
+def get_longest_ranges(conf):
+    """
+        Pick two longest ranges of HSV values from
+        given ranges.
+        TODO:
+        -> always pick 1,2 or 1-something
+    """
+    indexes = range(0, len(conf) - 1, 2)
+    best_ranges = [(conf[ind+1] - conf[ind], [conf[ind], conf[ind+1]]) for ind in indexes]
+    best_ranges = sorted(best_ranges)
+    final = best_ranges[-1][1] + best_ranges[-2][1]
+    if best_ranges[-1][1][0] > best_ranges[-2][1][0]:
+        final = best_ranges[-2][1] + best_ranges[-1][1]
+    #print final
+    return final
 
 def get_ranges(hist):
+    """
+        From histogram of HSV values calculates ranges to use
+        in detecting human skin.
+    """
     rngs = []
     if len(hist) == 0:
-        return [255, 255, 255, 255]
+        return [255, 254, 255, 254]
 
     low = min(1, len(hist))
     for i in range(low, len(hist)):
         if hist[i] > 0.007:
             rngs.append(i)
-    # print rngs
+    #print rngs
     if len(rngs) == 0:
-        return [255, 255, 255, 255]
+        return [255, 254, 255, 254]
     elif len(rngs) == 1:
-        return [rngs[0], rngs[0], 255, 255]
+        return [rngs[0], rngs[0], 255, 254]
 
     current = rngs[0]
     values = [rngs[0]]
-    cnt = 0
     for i in range(1, len(rngs)):
-        if (rngs[i] <= current + 2) or \
+        if (rngs[i] <= current + 3) or \
            (rngs[i] > 120 and rngs[i] <= current + 6):
             current = rngs[i]
-            cnt += 1
         else:
-            if cnt == 0:
-                values.append(rngs[i])
-                cnt = 0
-                continue
             values.append(current)
             values.append(rngs[i])
             current = rngs[i]
-            cnt = 0
     if current == rngs[-1]:
         values.append(current)
-    if len(values) > 4:
-        values = values[:4]
     if len(values) == 2:
-        values.extend([255, 255])
+        values.extend([255, 254])
+    if len(values) > 4:
+        values = get_longest_ranges(values)
+    
     return values
 
 
 def clean_conf(conf):
+    """
+        Changes ranges of detected HSV values with respect to 
+        prior knowledge of HSV ranges for human skin in 
+        artificial and natural light conditions.
+    """
     # near zero changes
-    if conf[0] < 3 and conf[1] <= 15:
+    if conf[0] < 5 and conf[1] <= 15:
         conf[0] = 1
         if conf[1] > 3:
             conf[1] = 2
-    if conf[1] > 35:
-        conf[1] = 35
+    if conf[1] > 30 and conf[0] < 30:
+        conf[1] = 27
 
     # daylight changes
-    if 36 < conf[3] < 80:
-        conf[3] = 36 
-    if 36 < conf[2] < 80:
-        conf[2] = 36
-
-    # night changes
+    if (35 < conf[2] <= 50) and (35 < conf[3] <= 50):
+        conf[2] = 35
+        conf[3] = 35 
+    
+    # night changes: 50 - 120 forbidden range of HSV values
     if 150 < conf[2] < 190:
         conf[2] = 150
-    if 80 < conf[2] < 120:
+    if 50 < conf[2] < 120:
         conf[2] = 120
-    if 80 < conf[3] < 190:
+    if 50 < conf[3] < 120:
+        conf[3] = 120
+    if 150 < conf[3] < 190:
         conf[3] = 190
-    if 200 < conf[3] < 255:
-        conf[3] = 200
     return conf
 
 class Calibration2(object):
@@ -91,7 +108,7 @@ class Calibration2(object):
 
         self.best_conf = [1, 2, 3, 4]
         self.thr = 90
-        self.light = "Day" #or "Night" or "DayDim"
+        self.light = "Day"
 
         self.last = np.zeros((height, width), np.uint8)
         self.end = 0
@@ -108,20 +125,30 @@ class Calibration2(object):
                 biggest_area = m["m00"]
         return biggest
 
-    def cut_the_crap(self, cnt):
+    def get_head_rect(self, img, cnt):
         rect = list(cv2.boundingRect(cnt))
         if rect[3] > self.h/3:
             rect[3] = rect[3]/2
-        y2 = rect[3] + rect[1]
-        cnt2 = sorted(cnt, key=_height)
-        cnt2 = np.array([p for p in cnt2 if p[0][1] < y2])
-        return cnt2
+        approx_roi = get_roi(img, rect)
+        roi = approx_roi.copy()
+        cnts, hier = cv2.findContours(roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        cnt = self.biggest_cnt(cnts)
+        rect_inside = list(cv2.boundingRect(cnt))
+        rect[0] = rect[0] + rect_inside[0]
+        rect[1] = rect[1] + rect_inside[1]
+        rect[2] = rect_inside[2]
+        rect[3] = rect_inside[3]
+        return rect
 
     def discover_light(self):
         conf = self.best_conf
-        if conf[0] < 3 and conf[1] < 3:
+        if conf[0] > 100 and conf[2] > 100:
+            self.light = "Night"
+        elif conf[0] < 3 and conf[1] < 3:
             self.light = "Night"
         elif conf[1] <= 30 and conf[3] <= 30:
+            self.light = "DayDim"
+        elif self.thr < 55:
             self.light = "DayDim"
         else:
             self.light = "Day"
@@ -135,10 +162,9 @@ class Calibration2(object):
         cnts, hier = cv2.findContours(v2, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnt = self.biggest_cnt(cnts)
         if cnt is not None:
-            cnt = self.cut_the_crap(cnt)
-            self.rect = list(cv2.boundingRect(cnt))
-            draw_rects(v1, [self.rect], color=(100,0,0))
-            # cv2.imshow('otsu', v1)
+            self.rect = self.get_head_rect(v1, cnt)
+            # draw_rects(v1, [self.rect], color=(100,0,0))
+            # cv2.imshow('OTSU', v1)
             roi = get_roi(orig, self.rect)
             mask = get_roi(v1, self.rect)
             hist = cv2.calcHist([roi], [0], mask, [256], [0,256])
@@ -179,13 +205,13 @@ def test_main():
         if k == 27:
             break
         cnt += 1
-        if cnt > 20:
+        if cnt > 120:
             break
     print clbr.best_conf
     print clbr.thr
     print clbr.light
-    LIGHT = "Night" #clbr.light
-    CFG_HSV = clbr.best_conf #[1,30,120,190] 
+    LIGHT = clbr.light
+    CFG_HSV = clbr.best_conf
     CFG_THR = clbr.thr
 
     while True:

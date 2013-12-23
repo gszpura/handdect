@@ -75,7 +75,7 @@ def mainSubHSV():
         #final = trf.postprocess(final)
         track.update(final)
         track.follow(f)
-        #print time.time() - st
+        print time.time() - st
         cv2.imshow('IMG', f)
         cv2.imshow('IMG2', final)
         k = cv2.waitKey(20)
