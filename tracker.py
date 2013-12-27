@@ -1,15 +1,24 @@
 """
     Trackery:
-        -> TrackerNext dla HAAR
-        -> StateTracker dla bgr substraction + HSV
+        -> TrackerAL for HAAR Cascades
+        -> StateTracker for background substraction + HSV + YUV
 
-    TODO aplikacji:
-    - rozwiazac sporadycznie pojawiajace sie problemy z przeskakiwaniem reki na twarz
-    - convectivyDefects: jestli brak wiekszych w FACE to oznacza, ze to PALM
-    - kalibracja
+    TODO pracy dyplomowej:
+    - convectivyDefects: jestli brak wiekszych w FACE to oznacza, ze to PALM 
     - przepisac do cythona
     - HAAR
     - porownania i testy
+
+    TODO trackera:
+    - poprawic wyznaczanie HEAD, startowa pozycja od kalibracji?, area w ktorej moze pojawic sie glowa(moze nawet nie trzeba)
+    - przechodzenie reki nad glowa -> wydluzanie boxa, czasem, czasem zastoje -> przez blad w ShapeDiscovery w cythonie 
+
+    TODO aplikacji:
+    - wykorzystac analize rectow w kazdej klatce
+
+    FUTURE TASKS/KNOWN BUGS:
+    - kalibracja tylko na podstawie glowy lub kalibracja na podstawie uniesionej dloni
+
 """
 
 
@@ -34,11 +43,14 @@ from main_utils import draw_circles, \
     is_near_rect, \
     correct_rect, \
     distance_between_rects, \
-    further_from_rect
+    further_from_rect, \
+    is_real_check, \
+    get_roi
 from shape_discovery import ShapeDiscovery
 
 
 BODY_PARTS = ["UNKNOWN", "HAND", "FACE", "FACE_AND_HAND"]
+
 
 class RectSaver(object):
 
@@ -276,146 +288,19 @@ class TrackerAL:
             pass
         self.rects = None
             
-            
-#############################################################################################
-
-
-class TrackerNext:
-
-    def __init__(self):
-        self.x = -1
-        self.y = -1
-        self.vx = 0
-        self.vy = 0
-        self.predicted_x = -1
-        self.predicted_y = -1
-        self.sizex_up = 60
-        self.sizex_down = 70
-        self.sizey_up = 180
-        self.sizey_down = 30
-        self.the_box = [-1,-1,-1,-1]
-        self.last_positions = []
-        self.enter_counter = 0
-        self.jump_counter = 0
-            
-    def draw_bounding_rects(self, img, contours):
-        cv2.line(img, (30, 10),(30, 70),(255,0,0))
-        cv2.line(img, (30, 10),(90, 10),(255,0,0))
-        cnts = [cv2.boundingRect(cnt) for cnt in contours if cv2.contourArea(cnt) > 500]
-        for cnt in cnts:
-            x,y,w,h = cnt
-            cv2.rectangle(img,(x,y),(x+w,y+h),(255,0,0), 1)
-            
-    def draw_rect(self, img, box):
-        x,y,w,h = box
-        cv2.rectangle(img,(x,y),(x+w,y+h),(255,0,0), 3)
         
-    def get_hsv_limits(self, img):
-        cp = img.copy()
-        contours, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        self.rects = [cv2.boundingRect(cnt) for cnt in contours if 100 < cv2.contourArea(cnt) < 20000]
-        x1, x2, y1, y2 = [300]*4
-        for rec in self.rects:
-            x, y, w, h = rec
-            if x < x1:
-                x1 = x
-            if x + w > x2:
-                x2 = x + w
-            if y < y1:
-                y1 = y
-            if y + h > y2:
-                y2 = y + h
-        return (x1, x2, y1, y2)
-        
-    def process_bounding_rects(self, contours):
-        sizex_up = self.sizex_up
-        sizex_down = self.sizex_down
-        sizey_up = self.sizey_up
-        sizey_down = self.sizey_down
-        rects = [cv2.boundingRect(cnt) for cnt in contours if cv2.contourArea(cnt) > 500]
-        found = [0,0,0,0]
-        #when there is more of small bounding boxes
-        for r in rects:
-            if r[2]*r[3] > found[2]*found[3]:
-                found = list(r)
-        if found[2] == 0:
-            found = False
-        elif found[2]*found[3] < 4800:
-            found[0] -= 20
-            found[1] -= 20
-            found[2] += 60
-            found[3] += 80
-        return found
-        
-    def track_rect(self, best_box):
-        enter_x = 80
-        enter_y = 80
-        exit_x = 40
-        exit_y = 40
-        jump_constr = 200
-        jump_thr_x = 120
-        jump_thr_y = 120
-        box_size_inertia_w = 15
-        box_size_inertia_h = 20
-        if not best_box:
-            return self.the_box
-        cx = best_box[0] + best_box[2]/2
-        cy = best_box[1] + best_box[3]/2
-        if self.the_box[3] == -1:    
-            if cx < enter_x or cx > 640 - enter_x or cy > 480 - enter_y:
-                self.the_box = best_box
-        else:
-            if (cx < exit_x and self.vx < -exit_x) or (cx > 640 - exit_x and self.vy > exit_y ) or (cy > 480 - exit_y and self.vx > exit_x):
-                self.the_box = [-1,-1,-1,-1]
-            else:
-                diff_x = self.the_box[0] - best_box[0]
-                diff_y = self.the_box[1] - best_box[1]
-                diff_w = self.the_box[2] - best_box[2]
-                diff_h = self.the_box[3] - best_box[3]
-                if abs(diff_x) > jump_constr or abs(diff_y) > jump_constr:
-                    return self.the_box
-                if abs(diff_x) > jump_thr_x:
-                    best_box[0] = best_box[0] + diff_x/2
-                if abs(diff_y) > jump_thr_y:
-                    best_box[1] = best_box[1] + diff_y/2
-                if abs(diff_w) > box_size_inertia_w:
-                    if diff_w > 0:
-                        best_box[2] = best_box[2] + diff_w - box_size_inertia_w
-                    else:
-                        best_box[2] = best_box[2] + diff_w + box_size_inertia_w
-                if abs(diff_h) > box_size_inertia_h:
-                    if diff_h > 0:
-                        best_box[3] = best_box[3] + diff_h - box_size_inertia_w
-                    else:
-                        best_box[3] = best_box[3] + diff_h + box_size_inertia_w
-                #zapamietanie ostatnich pozycji + predykcja ruchu
-                self.the_box = best_box
-        return self.the_box
-    
-    def update(self, img): 
-        cp = img.copy()
-        contours, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-        self.draw_bounding_rects(img, contours)
-        best_box = self.process_bounding_rects(contours)
-        the_rect = self.track_rect(best_box)
-        self.draw_rect(img, the_rect)
-   
-
 ##########################################################################################################################################     
 
 
 class StateTracker(object):
     
-    def __init__(self, light, color_range, threshold):
+    def __init__(self, light, threshold):
         self.clear()
         self.out_limit = 10
         self.rsave = RectSaver()
         self.dsc = ShapeDiscovery(light)
-        self.dsc.set_color_range(color_range)
         self.dsc.set_threshold(threshold)
         self.head_rect = [200, 200, 0, 0]
-        self.special = None
 
     def clear(self):
         self.last_rect = None
@@ -438,6 +323,10 @@ class StateTracker(object):
         self.is_not_real_counter = 0
         self.out = True
 
+        self.frame = None
+        self.current_types = []
+        self.last_roi = None
+
     def choose_contour(self, contours):
         rects = [cv2.boundingRect(cnt) for cnt in contours if cv2.contourArea(cnt) > 2400]
         def area(rect):
@@ -454,6 +343,12 @@ class StateTracker(object):
         self.average_calculations()
         self.really_old_rect = self.before_last_rect
         self.before_last_rect = self.last_rect
+        # frames and rois
+        if self.last_rect is not None:
+            self.last_roi = get_roi(self.frame, self.last_rect)
+        else:
+            self.last_roi = None
+        self.frame = img
     
     def internal_one_inside_another(self):
         return one_inside_another(self.last_rect, self.before_last_rect, 3, True)
@@ -583,18 +478,17 @@ class StateTracker(object):
         if self.last_rect[3] > CFG_HEIGHT/1.5:
             self.last_rect[3] = int(self.last_rect[3]/1.5)
 
-    def analyze_rects(self, img):
-        _type = "UNKNOWN"
-        if self.last_rect is not None:
-            dsc_rect = correct_rect(self.last_rect)
-            val = self.dsc.discover(img, dsc_rect)
-            _type = BODY_PARTS[val]
-        elif len(self.rects) == 1:
-            dsc_rect = correct_rect(self.rects[0])
-            val = self.dsc.discover(img, dsc_rect)
-            _type = BODY_PARTS[val]
+    def shape_analysis(self):
+        self.current_types = []
+        for rect in self.rects:
+            val = self.dsc.discover(self.frame, rect)
+            self.current_types.append(BODY_PARTS[val])
 
-        is_real = self.dsc.is_real()
+    def analyze_rects(self, img):
+        if self.last_roi is not None:
+            is_real = is_real_check(self.last_roi)
+        else:
+            is_real = False
         if len(self.rects) == 0:
             if is_real:
                 self.is_not_real_counter = 0
@@ -607,7 +501,7 @@ class StateTracker(object):
                 self.is_not_real_counter = 0
             else:
                 self.is_not_real_counter += 1
-            if self.last_rect is None and _type == "FACE":
+            if self.last_rect is None and self.current_types[0] == "FACE":
                 self.head_rect = average_rect(self.head_rect, self.rects[0])
         elif len(self.rects) == 2:
             if self.rects[0] == self.last_rect and not is_near_rect(self.last_rect, self.rects[1]):
@@ -646,6 +540,7 @@ class StateTracker(object):
                 self.out_limit = 10
             return
 
+        self.shape_analysis()
         prediction = False
         if self.last_rect == None:
             if len(self.rects) == 0:
@@ -662,7 +557,6 @@ class StateTracker(object):
                     self.last_rect = self.rects[1]
         else:
             if len(self.rects) == 0:
-                #self.last_rect = self.predicted_rect
                 prediction = True
             elif len(self.rects) == 1:
                 #print "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
@@ -673,7 +567,6 @@ class StateTracker(object):
                         if close_to_each_other(self.rects[0], self.head_rect):
                             prediction = True
                         elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
-                            #print "TTTTTTTTTTTTTTTT"
                             self.last_rect = combine_rects(self.last_rect, self.rects[0])
                         else:
                             #print "MMMMMMMMMMMMMMMMM"
@@ -685,7 +578,6 @@ class StateTracker(object):
                         self.last_rect = self.rects[0]
 
             elif len(self.rects) == 2:
-                #print "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
                 r1_close = close_to_each_other_central(self.last_rect, self.rects[0])
                 r2_close = close_to_each_other_central(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
@@ -694,12 +586,12 @@ class StateTracker(object):
                     elif one_inside_another(self.rects[1], self.head_rect, 2):
                         self.last_rect = self.rects[0]
                 elif r1_close:
+                    draw_rects(img, [self.rects[0]], 1, (255,255,0))
                     self._one_rect_operations(self.rects[0])
                 elif r2_close:
-                    #print "ZZZZZZZZZZZZZZZZZZZZZZZZ"
+                    draw_rects(img, [self.rects[1]], 1, (255,255,0))
                     self._one_rect_operations(self.rects[1])
                 else:
-                    #print "-----------------------------------------------------????"
                     r1_close = False
                     r2_close = False
                     if self.predicted_rect is not None:
@@ -709,15 +601,9 @@ class StateTracker(object):
                         self.last_rect = self.rects[0]
                     elif r2_close and not r1_close:
                         self.last_rect = self.rects[1]
-                    elif not r1_close and not r2_close:
-                        #print "))))))))))))))))))))))))))))))))))))))))))))"
-                        rect = further_from_rect(self.head_rect, self.rects[0], self.rects[1])
-                        if not close_to_each_other_central(rect, self.head_rect):
-                            self.last_rect = rect
                     prediction = True
         self.analyze_rects(img)
-        if self.special is not None:
-            draw_rects(img, [self.special], 1, (255,255,0))
+        
         #postprocessing
         if self.check_borders():
             self.clear()

@@ -1,17 +1,11 @@
 import cv2
 import numpy as np
 import time
-from main_utils import draw_rects
+from main_utils import draw_rects, \
+    get_roi
 
 absd = cv2.absdiff
 
-def _height(p):
-    return p[0][1]
-
-def get_roi(img, rect):
-    x,y,w,h = rect
-    roi = img[y:y+h, x:x+w]
-    return roi
 
 def get_longest_ranges(conf):
     """
@@ -29,28 +23,27 @@ def get_longest_ranges(conf):
     #print final
     return final
 
-def get_ranges(hist):
+def get_ranges(hist, threshold):
     """
         From histogram of HSV values calculates ranges to use
         in detecting human skin.
     """
     rngs = []
     if len(hist) == 0:
-        return [255, 254, 255, 254]
+        return [255, 255, 255, 255]
 
-    low = min(1, len(hist))
-    for i in range(low, len(hist)):
-        if hist[i] > 0.007:
+    for i in range(0, len(hist)):
+        if hist[i] > threshold:
             rngs.append(i)
-    #print rngs
+    print rngs, "high values"
     if len(rngs) == 0:
-        return [255, 254, 255, 254]
+        return [255, 255, 255, 255]
     elif len(rngs) == 1:
-        return [rngs[0], rngs[0], 255, 254]
+        return [rngs[0], rngs[0], 255, 255]
 
     current = rngs[0]
     values = [rngs[0]]
-    for i in range(1, len(rngs)):
+    for i in range(0, len(rngs)):
         if (rngs[i] <= current + 3) or \
            (rngs[i] > 120 and rngs[i] <= current + 6):
             current = rngs[i]
@@ -61,41 +54,52 @@ def get_ranges(hist):
     if current == rngs[-1]:
         values.append(current)
     if len(values) == 2:
-        values.extend([255, 254])
+        values.extend([255, 255])
     if len(values) > 4:
         values = get_longest_ranges(values)
     
     return values
 
 
-def clean_conf(conf):
+def clean_conf_h(conf):
     """
         Changes ranges of detected HSV values with respect to 
         prior knowledge of HSV ranges for human skin in 
         artificial and natural light conditions.
     """
-    # near zero changes
-    if conf[0] < 5 and conf[1] <= 15:
-        conf[0] = 1
-        if conf[1] > 3:
-            conf[1] = 2
-    if conf[1] > 30 and conf[0] < 30:
-        conf[1] = 27
+    if conf[2] == 255 and conf[3] == 255 and conf[0] < 15 and conf[1] > 20:
+        if conf[1] >= 30:            
+            conf[0] = 0
+            conf[1] = 20
+            conf[2] = 30
+            conf[3] = 30
+        elif conf[1] >= 25:
+            c0 = conf[0]
+            conf[0] = 0
+            conf[1] = 0
+            conf[2] = c0
+            conf[3] = 25
 
-    # daylight changes
+    if conf[1] <= 18 and conf[0] < 12:
+        conf[0] = 0
+
+    # forbidden ranges
     if (35 < conf[2] <= 50) and (35 < conf[3] <= 50):
         conf[2] = 35
         conf[3] = 35 
-    
-    # night changes: 50 - 120 forbidden range of HSV values
-    if 150 < conf[2] < 190:
-        conf[2] = 150
     if 50 < conf[2] < 120:
         conf[2] = 120
     if 50 < conf[3] < 120:
         conf[3] = 120
-    if 150 < conf[3] < 190:
-        conf[3] = 190
+    return conf
+
+def clear_conf_v(conf):
+    if conf[1] - conf[0] > 30:
+        conf[0] -= 5
+        conf[1] -= 10
+    elif conf[1] - conf[0] > 25:
+        conf[0] -= 3
+        conf[1] -= 6
     return conf
 
 class Calibration2(object):
@@ -106,33 +110,41 @@ class Calibration2(object):
         self.w = width
         self.rect = [0, 0, 0, 0]
 
-        self.best_conf = [1, 2, 3, 4]
+        self.conf_h = [0, 0, 0, 0]
+        self.conf_yv = [0, 0, 0, 0]
         self.thr = 90
         self.light = "Day"
 
         self.last = np.zeros((height, width), np.uint8)
         self.end = 0
         self.cnt = 0
-        self.cnt_max = 20
+        self.cnt_max = 40
+
+        self.yv_remove_threshold = 0.04
+        self.h_remove_threshold = 0.03
 
     def biggest_cnt(self, cnts):
         biggest = None
         biggest_area = 0
         for cnt in cnts:
             m = cv2.moments(cnt)
-            if m["m00"] > biggest_area:
+            rect = cv2.boundingRect(cnt)
+            if m["m00"] > biggest_area and rect[1] < self.h/2:
                 biggest = cnt
                 biggest_area = m["m00"]
         return biggest
 
     def get_head_rect(self, img, cnt):
+        print type(cnt)
         rect = list(cv2.boundingRect(cnt))
         if rect[3] > self.h/3:
             rect[3] = rect[3]/2
         approx_roi = get_roi(img, rect)
         roi = approx_roi.copy()
+        #cv2.imshow('roihead', roi)
         cnts, hier = cv2.findContours(roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnt = self.biggest_cnt(cnts)
+
         rect_inside = list(cv2.boundingRect(cnt))
         rect[0] = rect[0] + rect_inside[0]
         rect[1] = rect[1] + rect_inside[1]
@@ -140,22 +152,26 @@ class Calibration2(object):
         rect[3] = rect_inside[3]
         return rect
 
-    def discover_light(self):
-        conf = self.best_conf
-        if conf[0] > 100 and conf[2] > 100:
-            self.light = "Night"
-        elif conf[0] < 3 and conf[1] < 3:
-            self.light = "Night"
-        elif conf[1] <= 30 and conf[3] <= 30:
-            self.light = "DayDim"
-        elif self.thr < 55:
-            self.light = "DayDim"
-        else:
+    def discover_light(self, value_img):
+        dummy, value_240 = cv2.threshold(value_img, 240, 255, cv2.THRESH_BINARY)
+        dummy, value_thr = cv2.threshold(value_img, self.thr, 255, cv2.THRESH_BINARY)
+        no_white_240 = cv2.countNonZero(value_240)
+        no_white_thr = cv2.countNonZero(value_thr)
+        cnts, hier = cv2.findContours(value_240, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        rects = [cv2.boundingRect(cnt) for cnt in cnts if cv2.contourArea(cnt) > 20000]
+        if no_white_thr*0.4 <= no_white_240 and len(rects) > 0:
             self.light = "Day"
+            self.thr = 240
+        else:
+            self.light = "Night"
 
     def update(self, img):
         hsv1 = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
         h1,s1,v1 = cv2.split(hsv1)
+        value_img = v1.copy()
+        y, u, v = cv2.split(yuv)
+        self.frame = h1
         orig = h1.copy()
         self.thr, v1 = cv2.threshold(v1, 0, 255, cv2.THRESH_OTSU)
         v2 = v1.copy()
@@ -163,16 +179,27 @@ class Calibration2(object):
         cnt = self.biggest_cnt(cnts)
         if cnt is not None:
             self.rect = self.get_head_rect(v1, cnt)
-            # draw_rects(v1, [self.rect], color=(100,0,0))
-            # cv2.imshow('OTSU', v1)
-            roi = get_roi(orig, self.rect)
+            #draw_rects(v1, [self.rect], color=(100,0,0))
+            #cv2.imshow('thr', v1)
+            roi_h = get_roi(orig, self.rect)
+            roi_v = get_roi(v, self.rect)
             mask = get_roi(v1, self.rect)
-            hist = cv2.calcHist([roi], [0], mask, [256], [0,256])
+
+            hist = cv2.calcHist([roi_h], [0], mask, [256], [0,256])
             hist = np.array([i/hist.max() for i in hist])
-            conf = get_ranges(hist)
-            print "*",
-            self.best_conf = clean_conf(conf)
-            self.discover_light()
+            conf = get_ranges(hist, threshold=self.h_remove_threshold)
+            if conf[1] - conf[0] > 30:
+                self.h_remove_threshold += 0.02
+            self.conf_h = clean_conf_h(conf)
+
+            hist = cv2.calcHist([roi_v], [0], mask, [256], [0,256])
+            hist = np.array([i/hist.max() for i in hist])
+            self.conf_yv = get_ranges(hist, threshold=self.yv_remove_threshold)
+            if self.conf_yv[1] - self.conf_yv[0] > 30:
+                self.yv_remove_threshold += 0.01
+            self.conf_yv = clear_conf_v(self.conf_yv)
+
+            self.discover_light(value_img)
             self.cnt += 1
         if self.cnt >= self.cnt_max:
             self.end = 1
@@ -180,9 +207,9 @@ class Calibration2(object):
 
 
 def test_main():
-    c = cv2.VideoCapture(0)
+    c = cv2.VideoCapture(1)
     LIGHT = "Night"
-    CFG_HSV = [1, 2, 145, 190]
+    CFG_HSV = [0, 0, 0, 0]
     CFG_THR = 90
 
     def hsv(img):
@@ -195,7 +222,24 @@ def test_main():
                             np.array(color_range[3],np.uint8))
         d = cv2.bitwise_or(d, d2)
         return d
-    print "Calibration2"
+    def u__(img, color_range):
+        img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+        y, u, v = cv2.split(img_yuv)
+        d = cv2.inRange(u, np.array(color_range[0],np.uint8), 
+                           np.array(color_range[1],np.uint8))
+        d2 = cv2.inRange(u, np.array(color_range[2],np.uint8), 
+                            np.array(color_range[3],np.uint8))
+        d = cv2.bitwise_or(d, d2)
+        return d
+    def v__(img, color_range):
+        img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+        y, u, v = cv2.split(img_yuv)
+        d = cv2.inRange(v, np.array(color_range[0],np.uint8), 
+                           np.array(color_range[1],np.uint8))
+        d2 = cv2.inRange(v, np.array(color_range[2],np.uint8), 
+                            np.array(color_range[3],np.uint8))
+        d = cv2.bitwise_or(d, d2)
+        return d
     clbr = Calibration2()
     cnt = 0
     while (not clbr.end):
@@ -207,17 +251,20 @@ def test_main():
         cnt += 1
         if cnt > 120:
             break
-    print clbr.best_conf
-    print clbr.thr
-    print clbr.light
+    print clbr.conf_h, clbr.conf_yv, clbr.thr, clbr.light
     LIGHT = clbr.light
-    CFG_HSV = clbr.best_conf
+    CFG_HSV = clbr.conf_h
+    #CFG_HSV = [0,22, 23, 23]
     CFG_THR = clbr.thr
-
+    #clbr.conf_yv = [128, 133, 221, 255]
     while True:
         _,f = c.read()
         img = hsv(f)
-        cv2.imshow('res', img)
+        imgv = v__(f, clbr.conf_yv)
+        cv2.imshow('H', img)
+        cv2.imshow('V', imgv)   
+        d = cv2.bitwise_and(img, imgv)
+        cv2.imshow('D', d)
         k = cv2.waitKey(20)
         if k == 27:
             break

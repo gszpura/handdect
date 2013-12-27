@@ -190,3 +190,21 @@ def one_inside_another(current, previous, ratio=3, rigid=False):
         if previous_area > ratio*current_area:
             return True
     return False
+
+
+def is_real_check(roi):
+    if roi is None:
+        return False
+    w, h = roi.shape
+    all_pixels = 20*w
+    part_of_roi = roi[h/4:3*h/4,:]
+    amount = cv2.countNonZero(part_of_roi)
+    if amount > 0.05*all_pixels:
+        return True
+    else:
+        return False
+
+def get_roi(img, rect):
+    x,y,w,h = rect
+    roi = img[y:y+h, x:x+w]
+    return roi

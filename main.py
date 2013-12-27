@@ -10,7 +10,7 @@ import os
 import sys
 import time
 
-from tracker import TrackerAL, TrackerNext, StateTracker
+from tracker import TrackerAL, StateTracker
 from transformer import Transformer
 from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
@@ -49,41 +49,36 @@ def mainCascades():
     cv2.destroyAllWindows()
     c.release()
 
-#version with Substraction and HSV detection
-CFG_HSV = [1, 2, 145, 200]
-CFG_THR = 90
-LIGHT = "Night"
 
+#version with Substraction and HSV detection
 def mainSubHSV():
     clbr = Calibration2()
     while (not clbr.end):
         _,f = c.read()
         clbr.update(f)
-    print clbr.best_conf, clbr.thr, clbr.light, "*******&&&&&&"
+    print "*******", clbr.conf_h, clbr.conf_yv, clbr.thr, clbr.light, "*******"
     LIGHT = clbr.light
-    CFG_HSV = clbr.best_conf
+    CFG_HSV = clbr.conf_h
+    CFG_YUV = clbr.conf_yv
     CFG_THR = clbr.thr
-    track = StateTracker(LIGHT, CFG_HSV, CFG_THR)
-    trf = Transformer(LIGHT)
-    trf.set_color_ranges(CFG_HSV)
+    track = StateTracker(LIGHT, CFG_THR)
+    trf = Transformer(LIGHT, CFG_HSV, CFG_YUV, CFG_THR)
     while (1):
         _,f = c.read()
         st = time.time()
         move_cue = trf.move_cue(f)
         skin_cue = trf.skin_color_cue(f)
-        final = trf.smart_and(move_cue, skin_cue)
-        #final = trf.postprocess(final)
+        final = cv2.bitwise_and(skin_cue, move_cue)
         track.update(final)
         track.follow(f)
-        print time.time() - st
+        #print time.time() - st
         cv2.imshow('IMG', f)
-        cv2.imshow('IMG2', final)
+        cv2.imshow('SKIN FINAL', final)
         k = cv2.waitKey(20)
         if k == 113: #q
             shot = True
         if k == 27:
             break
-
 
     cv2.destroyAllWindows()
     c.release()
