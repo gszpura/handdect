@@ -4,26 +4,15 @@ import time
 
 from body_model import BodyPartsModel
 
-FIST = 0
-ONE_FINGER = 1
-TWO_FINGERS = 2
-THREE_FINGERS = 3
-FOUR_FINGERS = 4
-PALM = 5
+BODY_PARTS = ["UNKNOWN", "OPEN HAND", "ONE FINGER", "THUMB", "PALM", "FACE", "FACE & HAND", "TWO FINGERS"]
 
 
-
-class HandInfo(object):
-
-	def __init__(self):
-		self.position = (-1, -1)
-		self.gesture_type = -1
-		self.thumb = -1
-
+def rev_area(area):
+    return 1/float(area)
 
 class ShapeDiscovery(object):
 
-	def __init__(self, light):
+	def __init__(self):
 		self.rects = []
 		self.last = None
 		self.img = None
@@ -31,13 +20,6 @@ class ShapeDiscovery(object):
 		self.debug = True
 		self.rect1_score = 0
 		self.rect2_score = 0
-		if light == "DayDim":
-			light = "Day"
-		self.light = light
-		self.threshold = 100
-
-	def set_threshold(self, threshold):
-		self.threshold = threshold
 
 	def discover(self, img, rect=None):
 		if rect == None:
@@ -46,7 +28,9 @@ class ShapeDiscovery(object):
 		roi = img[y:y+h, x:x+w]
 		roi_trf = self.apply_approxing_transformation(roi)
 		bpm = BodyPartsModel(roi_trf)
-		return bpm.get_value()
+		shape_type = BODY_PARTS[bpm.get_value()]
+		shape_type = self.defects_info(roi_trf, shape_type)
+		return shape_type
 
 	def biggest_cnt(self, cnts):
 		biggest = None
@@ -70,8 +54,41 @@ class ShapeDiscovery(object):
 		#cv2.imshow('approxing', v1)
 		return v1
 
-	def additional_informations(self):
-		pass
+	def defects_info(self, roi, shape_cue):
+		cp = roi.copy()
+		cnts, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+		cnt = self.biggest_cnt(cnts)
+		hull = cv2.convexHull(cnt, returnPoints = False)
+		defects = cv2.convexityDefects(cnt, hull)
+		# display
+		"""for i in range(defects.shape[0]):
+		    s,e,f,d = defects[i,0]
+		    if d < 6500:
+		    	continue
+		    start = tuple(cnt[s][0])
+		    end = tuple(cnt[e][0])
+		    far = tuple(cnt[f][0])
+		    cv2.line(roi,start,end,[100,100,0],2)
+		    cv2.circle(roi,far,5,[100,100,0],-1) 
+		cv2.imshow('Def', roi) """
+		
+		biggest = [d[0][3] for d in defects]
+		biggest2 = sorted(biggest, key=rev_area)
+		biggest2 = biggest2[0:5]
+		biggest2 = [area for area in biggest2 if area > 6000]
+		defects_count = len(biggest2)
+		if shape_cue == "ONE FINGER":
+			return shape_cue
+		if shape_cue == BODY_PARTS[1] and defects_count in (1, 2):
+			return BODY_PARTS[3] #THUMB
+		elif defects_count == 3:
+			return BODY_PARTS[7] #TWO FINGERS
+		elif shape_cue == BODY_PARTS[1] and defects_count > 3:
+			return BODY_PARTS[1] #OPEN HAND
+		elif shape_cue == BODY_PARTS[5]:
+			return BODY_PARTS[4] #FACE -> PALM
+		else:
+			return shape_cue
 
 def main2():
 	path = "C:\\Python27\\pdym\\imgs\\img%s.png"

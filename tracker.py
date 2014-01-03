@@ -10,8 +10,10 @@
     - porownania i testy
 
     TODO trackera:
-    - poprawic wyznaczanie HEAD, startowa pozycja od kalibracji?, area w ktorej moze pojawic sie glowa(moze nawet nie trzeba)
-    - przechodzenie reki nad glowa -> wydluzanie boxa, czasem, czasem zastoje -> przez blad w ShapeDiscovery w cythonie 
+    - przechodzenie reki nad glowa: 
+        przeskakiwanie boxa: dodac 3 rect i sprawdzac czy nie jest blisko last_rect a rect[n] nie jest blisko head_rect
+        
+    - zamiana dloni i glowy 
 
     TODO aplikacji:
     - wykorzystac analize rectow w kazdej klatce
@@ -33,23 +35,19 @@ from main_utils import draw_circles, \
     close_to_each_other, \
     close_to_each_other_central, \
     is_far_away, \
-    not_close, \
+    is_very_close, \
     combine_rects, \
     one_inside_another, \
     CFG_HEIGHT, CFG_WIDTH, \
     draw_circles, \
     average_rect, \
-    average_queue, \
     is_near_rect, \
-    correct_rect, \
     distance_between_rects, \
     further_from_rect, \
     is_real_check, \
-    get_roi
+    get_roi, \
+    average_from_rects
 from shape_discovery import ShapeDiscovery
-
-
-BODY_PARTS = ["UNKNOWN", "HAND", "FACE", "FACE_AND_HAND"]
 
 
 class RectSaver(object):
@@ -291,16 +289,20 @@ class TrackerAL:
         
 ##########################################################################################################################################     
 
+def rev_area(rect):
+    return 1/float(rect[2]*rect[3])
+
 
 class StateTracker(object):
     
-    def __init__(self, light, threshold):
+    def __init__(self):
         self.clear()
         self.out_limit = 10
         self.rsave = RectSaver()
-        self.dsc = ShapeDiscovery(light)
-        self.dsc.set_threshold(threshold)
+        self.dsc = ShapeDiscovery()
         self.head_rect = [200, 200, 0, 0]
+        self.head_biggest = [640, 480, 0, 0]
+        self.head_history = deque([], maxlen=20)
 
     def clear(self):
         self.last_rect = None
@@ -326,19 +328,24 @@ class StateTracker(object):
         self.frame = None
         self.current_types = []
         self.last_roi = None
+        self.hand_info = -1
 
-    def choose_contour(self, contours):
-        rects = [cv2.boundingRect(cnt) for cnt in contours if cv2.contourArea(cnt) > 2400]
-        def area(rect):
-            return 1/float(rect[2]*rect[3])
-        s_rects = sorted(rects, key=area)
-        return rects[:2]
+        self.last_resort = [0,0,0,0]
+
+    def update_rects(self, contours):
+        rects = [cv2.boundingRect(cnt) for cnt in contours if cv2.contourArea(cnt) > 1500]
+        s_rects = sorted(rects, key=rev_area)
+        self.rects = s_rects[:2]
+        self.rects_small = s_rects[2:4]
+        #print map(lambda x: x[2]*x[3], s_rects)
+        #print self.rects
+
         
     def update(self, img):
         """things that have to be done before selection of new rect"""
         cp = img.copy()
         contours, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        self.rects = self.choose_contour(contours)
+        self.update_rects(contours)
         self.predicted_rect = self.prediction_calculations()
         self.average_calculations()
         self.really_old_rect = self.before_last_rect
@@ -349,7 +356,7 @@ class StateTracker(object):
         else:
             self.last_roi = None
         self.frame = img
-    
+
     def internal_one_inside_another(self):
         return one_inside_another(self.last_rect, self.before_last_rect, 3, True)
         
@@ -374,7 +381,7 @@ class StateTracker(object):
             return True
         if cy > CFG_HEIGHT - 40 and self.average_dxy[1] >= 10:
             return True
-        if self.is_not_real_counter > 6 and (x < 30 or x + w > CFG_WIDTH - 30 or y < 30 or y + h > CFG_HEIGHT - 30):
+        if self.is_not_real_counter > 5:
             return True
         return False
         
@@ -428,11 +435,7 @@ class StateTracker(object):
     def smooth_random_motions(self, candidate):
         if one_inside_another(candidate, self.last_rect):
             return self.last_rect
-        elif one_inside_another(candidate, self.really_old_rect, 2):
-            return self.really_old_rect
-            #return self.last_rect
-        else:
-            return candidate
+        return candidate
 
 
     def prediction_limit(self, prediction):
@@ -481,8 +484,19 @@ class StateTracker(object):
     def shape_analysis(self):
         self.current_types = []
         for rect in self.rects:
-            val = self.dsc.discover(self.frame, rect)
-            self.current_types.append(BODY_PARTS[val])
+            shape_type = self.dsc.discover(self.frame, rect)
+            self.current_types.append(shape_type)
+            #print BODY_PARTS[val]
+
+    def update_head_biggest(self, rect):
+        if rect[0] < self.head_biggest[0]:
+            self.head_biggest[0] = rect[0]
+        if rect[1] < self.head_biggest[1]:
+            self.head_biggest[1] = rect[1]
+        if rect[1] + rect[3] > self.head_biggest[1] + self.head_biggest[3]:
+            self.head_biggest[3] = rect[1] + rect[3] - self.head_biggest[1]
+        if rect[0] + rect[2] > self.head_biggest[0] + self.head_biggest[2]:
+            self.head_biggest[2] = rect[0] + rect[2] - self.head_biggest[0]
 
     def analyze_rects(self, img):
         if self.last_roi is not None:
@@ -501,43 +515,66 @@ class StateTracker(object):
                 self.is_not_real_counter = 0
             else:
                 self.is_not_real_counter += 1
-            if self.last_rect is None and self.current_types[0] == "FACE":
-                self.head_rect = average_rect(self.head_rect, self.rects[0])
+            if not is_near_rect(self.last_rect, self.rects[0]) and \
+               (self.current_types[0] in ("FACE", "FACE & HAND", "PALM") or self.is_head(self.rects[0])):
+                self.head_history.append(self.rects[0])
+                self.update_head_biggest(self.rects[0])
+                self.head_rect = average_from_rects(self.head_history)
         elif len(self.rects) == 2:
-            if self.rects[0] == self.last_rect and not is_near_rect(self.last_rect, self.rects[1]):
-                self.head_rect = average_rect(self.head_rect, self.rects[1])
-            elif self.rects[1] == self.last_rect and not is_near_rect(self.last_rect, self.rects[0]):
-                self.head_rect = average_rect(self.head_rect, self.rects[0])
+            if not is_near_rect(self.last_rect, self.rects[1]) and \
+               (self.current_types[1] in ("FACE", "FACE & HAND", "PALM") or self.is_head(self.rects[1])):
+                self.head_history.append(self.rects[1])
+                self.update_head_biggest(self.rects[1])
+                self.head_rect = average_from_rects(self.head_history)
+            elif not is_near_rect(self.last_rect, self.rects[0]) and \
+                 (self.current_types[0] in ("FACE", "FACE & HAND", "PALM") or self.is_head(self.rects[0])):
+                self.head_history.append(self.rects[0])
+                self.update_head_biggest(self.rects[0])
+                self.head_rect = average_from_rects(self.head_history)
             if is_real:
                 self.is_not_real_counter = 0
             else:
                 self.is_not_real_counter += 1
 
+    def is_head(self, rect):
+        if is_very_close(rect, self.head_rect, dm=12):
+            return True
+        elif distance_between_rects(rect, self.head_biggest) < 40:
+            return True
+        return False
+
     def _one_rect_operations(self, rect):
-        if close_to_each_other(self.last_rect, rect):
-            self.last_rect = self.smooth_random_motions(rect)
+        if close_to_each_other_central(self.last_rect, rect):
+            if self.is_head(rect):
+                rect = list(rect)
+                #rect[0] += self.dx/4
+                #rect[1] += self.dy/4
+                self.last_rect = self.smooth_random_motions(rect)
+            else:
+                self.last_rect = self.smooth_random_motions(rect)
         else:
             if is_far_away(self.last_rect, rect):
-                if close_to_each_other(rect, self.head_rect):
-                    pass
+                if close_to_each_other_central(rect, self.head_rect):
+                    self.hand_info = -1
                 elif rect[2]*rect[3]*4 <= self.last_rect[2]*self.last_rect[3]:
                     self.last_rect = combine_rects(self.last_rect, rect)
+                    self.hand_info = -1
                 else:
                     self.last_rect = rect
             elif rect[2]*rect[3]*4 <= self.last_rect[2]*self.last_rect[3]:
                 self.last_rect = combine_rects(self.last_rect, rect)
+                self.hand_info = -1
             elif not close_to_each_other_central(rect, self.head_rect):
                 self.last_rect = rect
 
     def follow(self, img):
-        draw_rects(img, [self.head_rect], 2, (0,255,0))
-        #draw_rects(img, self.rects, 1, (0,255,255))
+        draw_rects(img, [self.head_rect], 1, (0,255,0))
         if self.out:
             self.out_counter += 1
             if self.out_counter > self.out_limit:
                 self.out = False
                 self.out_counter = 0
-                self.out_limit = 10
+                self.out_limit = 7
             return
 
         self.shape_analysis()
@@ -546,72 +583,98 @@ class StateTracker(object):
             if len(self.rects) == 0:
                 return
             if len(self.rects) == 1:
-                if close_to_edge(self.rects[0]):
+                if close_to_edge(self.rects[0]) and self.current_types[0] == "OPEN HAND":
                     self.last_rect = self.rects[0] 
             if len(self.rects) == 2:
                 r1_close = close_to_edge(self.rects[0])
                 r2_close = close_to_edge(self.rects[1])
-                if r1_close:
+                if r1_close and self.current_types[0] == "OPEN HAND":
                     self.last_rect = self.rects[0]
-                elif r2_close:
+                elif r2_close and self.current_types[1] == "OPEN HAND":
                     self.last_rect = self.rects[1]
         else:
             if len(self.rects) == 0:
                 prediction = True
             elif len(self.rects) == 1:
-                #print "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
-                if close_to_each_other(self.last_rect, self.rects[0]):
-                    self.last_rect = self.smooth_random_motions(self.rects[0])
-                else:
-                    if is_far_away(self.last_rect, self.rects[0]):
-                        if close_to_each_other(self.rects[0], self.head_rect):
-                            prediction = True
-                        elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
-                            self.last_rect = combine_rects(self.last_rect, self.rects[0])
-                        else:
-                            #print "MMMMMMMMMMMMMMMMM"
-                            self.last_rect = self.rects[0]
-                    elif self.rects[0][2]*self.rects[0][3]*4 <= self.last_rect[2]*self.last_rect[3]:
-                        #print "CCCCCCCCCCCCCCCCCCC"
-                        self.last_rect = combine_rects(self.last_rect, self.rects[0])
-                    else:
-                        self.last_rect = self.rects[0]
-
+                self.hand_info = 0
+                self._one_rect_operations(self.rects[0])
             elif len(self.rects) == 2:
                 r1_close = close_to_each_other_central(self.last_rect, self.rects[0])
                 r2_close = close_to_each_other_central(self.last_rect, self.rects[1])
                 if r1_close and r2_close:
-                    if one_inside_another(self.rects[0], self.head_rect, 2):
-                        self.last_rect = self.rects[1]
-                    elif one_inside_another(self.rects[1], self.head_rect, 2):
+                    r1_pred = close_to_each_other_central(self.predicted_rect, self.rects[0])
+                    r2_pred = close_to_each_other_central(self.predicted_rect, self.rects[1])
+                    r2_head = close_to_each_other_central(self.rects[1], self.head_rect)
+                    r1_head = close_to_each_other_central(self.rects[0], self.head_rect)
+                    if r1_pred and not r2_pred:
                         self.last_rect = self.rects[0]
+                    elif r2_pred and not r1_pred:
+                        self.last_rect = self.rects[1]
+                    elif r1_pred and r2_pred:
+                        if r2_head:
+                            self.last_rect = self.rects[0]
+                        elif r1_head:
+                            self.last_rect = self.rects[1]
                 elif r1_close:
-                    draw_rects(img, [self.rects[0]], 1, (255,255,0))
+                    self.hand_info = 0
                     self._one_rect_operations(self.rects[0])
                 elif r2_close:
-                    draw_rects(img, [self.rects[1]], 1, (255,255,0))
+                    self.hand_info = 1
                     self._one_rect_operations(self.rects[1])
                 else:
                     r1_close = False
                     r2_close = False
+                    r3_close = False 
+                    r4_close = False
                     if self.predicted_rect is not None:
-                         r1_close = close_to_each_other_central(self.predicted_rect, self.rects[0])
-                         r2_close = close_to_each_other_central(self.predicted_rect, self.rects[1])
-                    if r1_close and not r2_close:
+                        r1_close = close_to_each_other_central(self.predicted_rect, self.rects[0])
+                        r2_close = close_to_each_other_central(self.predicted_rect, self.rects[1])
+                        small_len = len(self.rects_small)    
+                        if small_len > 0:
+                            r3_close = close_to_each_other_central(self.last_rect, self.rects_small[0])
+                            if small_len > 1:
+                                r4_close = close_to_each_other_central(self.last_rect, self.rects_small[1])
+                    if r3_close:
+                        self.last_rect = self.rects_small[0]
+                    elif r4_close:
+                        self.last_rect = self.rects_small[1]
+                    elif r1_close and not r2_close:
                         self.last_rect = self.rects[0]
+                        self.hand_info = 0
                     elif r2_close and not r1_close:
                         self.last_rect = self.rects[1]
+                        self.hand_info = 1
+                    elif r2_close and r1_close:
+                        self.last_rect = self.rects[0]
+                        self.hand_info = -1
+                    elif self.current_types[0] not in ("FACE", "PALM", "UNKNOWN"):
+                        self.last_rect = self.rects[0]
+                        self.hand_info = 0
+                    elif self.current_types[1] not in ("FACE", "PALM", "UNKNOWN"):
+                        self.last_rect = self.rects[1]
+                        self.hand_info = 1
+                    else:
+                        self.last_rect = self.predicted_rect
                     prediction = True
         self.analyze_rects(img)
-        
+        #special
+        self.draw_info(img)
         #postprocessing
         if self.check_borders():
             self.clear()
             self.out = True
             return
         self.prediction_limit(prediction)
-        self.fit_rect_size()
+        #self.fit_rect_size()
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
 
-            
+        
+    def draw_info(self, img):
+        if self.hand_info > -1 and len(self.current_types) > 0:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(img, self.current_types[self.hand_info], (10, 25), font, 1, (255,255,255), 2)
+
+    def draw_text(self, img, text, pos):
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(img, text, pos, font, 1, (255, 0, 255))

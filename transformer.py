@@ -116,7 +116,7 @@ class Transformer:
     def choose_contour(self, contours):
         rects = [cv2.boundingRect(cnt) for cnt in contours if cv2.contourArea(cnt) > 200]
         s_rects = sorted(rects, key=rev_area)
-        return rects[:20]
+        return s_rects[:20]
         
     def postprocess(self, img):
         img = cv2.medianBlur(img, 3)

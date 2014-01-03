@@ -10,17 +10,27 @@ absd = cv2.absdiff
 def get_longest_ranges(conf):
     """
         Pick two longest ranges of HSV values from
-        given ranges.
-        TODO:
-        -> always pick 1,2 or 1-something
+        given ranges. If there's range with 0 always
+        pick it.
     """
+    add_zero = False
+    zero_range = [0, 0]
+    if conf[0] == 0:
+        add_zero = True
+        zero_range[1] = conf[1]
+
     indexes = range(0, len(conf) - 1, 2)
     best_ranges = [(conf[ind+1] - conf[ind], [conf[ind], conf[ind+1]]) for ind in indexes]
     best_ranges = sorted(best_ranges)
     final = best_ranges[-1][1] + best_ranges[-2][1]
     if best_ranges[-1][1][0] > best_ranges[-2][1][0]:
         final = best_ranges[-2][1] + best_ranges[-1][1]
-    #print final
+
+    if add_zero:
+        if final[0] != 0:
+            final = zero_range + final[0:2]
+        else:
+            final = zero_range + final[2:4]
     return final
 
 def get_ranges(hist, threshold):
@@ -35,7 +45,7 @@ def get_ranges(hist, threshold):
     for i in range(0, len(hist)):
         if hist[i] > threshold:
             rngs.append(i)
-    print rngs, "high values"
+    #print rngs, "high values"
     if len(rngs) == 0:
         return [255, 255, 255, 255]
     elif len(rngs) == 1:
@@ -118,7 +128,7 @@ class Calibration2(object):
         self.last = np.zeros((height, width), np.uint8)
         self.end = 0
         self.cnt = 0
-        self.cnt_max = 40
+        self.cnt_max = 30
 
         self.yv_remove_threshold = 0.04
         self.h_remove_threshold = 0.03
@@ -135,7 +145,6 @@ class Calibration2(object):
         return biggest
 
     def get_head_rect(self, img, cnt):
-        print type(cnt)
         rect = list(cv2.boundingRect(cnt))
         if rect[3] > self.h/3:
             rect[3] = rect[3]/2
@@ -173,7 +182,10 @@ class Calibration2(object):
         y, u, v = cv2.split(yuv)
         self.frame = h1
         orig = h1.copy()
-        self.thr, v1 = cv2.threshold(v1, 0, 255, cv2.THRESH_OTSU)
+        if self.thr < 240:
+            self.thr, v1 = cv2.threshold(v1, 0, 255, cv2.THRESH_OTSU)
+        else:
+            dummy, v1 = cv2.threshold(v1, 240, 255, cv2.THRESH_BINARY)
         v2 = v1.copy()
         cnts, hier = cv2.findContours(v2, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnt = self.biggest_cnt(cnts)
@@ -207,7 +219,7 @@ class Calibration2(object):
 
 
 def test_main():
-    c = cv2.VideoCapture(1)
+    c = cv2.VideoCapture(0)
     LIGHT = "Night"
     CFG_HSV = [0, 0, 0, 0]
     CFG_THR = 90

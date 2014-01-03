@@ -21,7 +21,7 @@ from calibration2 import Calibration2
 
 #global init
 shot = False
-c = cv2.VideoCapture(0)
+c = cv2.VideoCapture(1)
 
 #version for Cascades
 def mainCascades():
@@ -61,7 +61,7 @@ def mainSubHSV():
     CFG_HSV = clbr.conf_h
     CFG_YUV = clbr.conf_yv
     CFG_THR = clbr.thr
-    track = StateTracker(LIGHT, CFG_THR)
+    track = StateTracker()
     trf = Transformer(LIGHT, CFG_HSV, CFG_YUV, CFG_THR)
     while (1):
         _,f = c.read()
