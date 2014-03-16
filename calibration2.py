@@ -219,7 +219,7 @@ class Calibration2(object):
 
 
 def test_main():
-    c = cv2.VideoCapture(0)
+    c = cv2.VideoCapture(1)
     LIGHT = "Night"
     CFG_HSV = [0, 0, 0, 0]
     CFG_THR = 90
@@ -234,6 +234,7 @@ def test_main():
                             np.array(color_range[3],np.uint8))
         d = cv2.bitwise_or(d, d2)
         return d
+
     def u__(img, color_range):
         img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
         y, u, v = cv2.split(img_yuv)
@@ -243,6 +244,7 @@ def test_main():
                             np.array(color_range[3],np.uint8))
         d = cv2.bitwise_or(d, d2)
         return d
+
     def v__(img, color_range):
         img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
         y, u, v = cv2.split(img_yuv)
@@ -252,6 +254,7 @@ def test_main():
                             np.array(color_range[3],np.uint8))
         d = cv2.bitwise_or(d, d2)
         return d
+
     clbr = Calibration2()
     cnt = 0
     while (not clbr.end):
@@ -268,15 +271,29 @@ def test_main():
     CFG_HSV = clbr.conf_h
     #CFG_HSV = [0,22, 23, 23]
     CFG_THR = clbr.thr
+    #CFG_THR = 240
     #clbr.conf_yv = [128, 133, 221, 255]
     while True:
         _,f = c.read()
-        img = hsv(f)
-        imgv = v__(f, clbr.conf_yv)
-        cv2.imshow('H', img)
-        cv2.imshow('V', imgv)   
-        d = cv2.bitwise_and(img, imgv)
-        cv2.imshow('D', d)
+        img_hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
+        h,s,v = cv2.split(img_hsv)
+        img_h = hsv(f)
+        img_yv = v__(f, clbr.conf_yv)
+        dummy, img_v = cv2.threshold(v, CFG_THR, 255, cv2.THRESH_BINARY)
+
+        res1 = cv2.bitwise_and(img_h, img_yv)
+        res2 = cv2.bitwise_and(res1, img_v)
+        ####
+        img_h_small = cv2.resize(img_h, (320, 240))
+        #element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
+        img_yv_small = cv2.resize(img_yv, (320, 240))
+        img_v_small = cv2.resize(img_v, (320, 240))
+        res_small = cv2.resize(res2, (320, 240))
+
+        cv2.imshow('H', img_h_small)
+        cv2.imshow('V (YUV)', img_yv_small)
+        cv2.imshow('V (HSV)', img_v)   
+        cv2.imshow('All', res_small)
         k = cv2.waitKey(20)
         if k == 27:
             break

@@ -668,7 +668,6 @@ class StateTracker(object):
         #self.fit_rect_size()
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
-
         
     def draw_info(self, img):
         if self.hand_info > -1 and len(self.current_types) > 0:

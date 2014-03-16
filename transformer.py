@@ -77,6 +77,7 @@ class Transformer:
         dummy, result3 = cv2.threshold(result2, 9, 255, cv2.THRESH_BINARY)
         eroded = cv2.erode(result3, element)
         dilated = cv2.dilate(eroded, element)
+        
         d = dilated.copy()
         contours, hier = cv2.findContours(d, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         rects = self.choose_contour(contours)
