@@ -21,7 +21,7 @@ from calibration2 import Calibration2
 
 #global init
 shot = False
-c = cv2.VideoCapture(1)
+c = cv2.VideoCapture(0)
 
 #version for Cascades
 def mainCascades():
@@ -70,7 +70,7 @@ def mainSubHSV():
         skin_cue = trf.skin_color_cue(f)
         final = cv2.bitwise_and(skin_cue, move_cue)
         track.update(final)
-        track.follow(f)
+        info = track.follow(f)
         #print time.time() - st
         cv2.imshow('IMG', f)
         cv2.imshow('SKIN FINAL', final)

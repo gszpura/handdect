@@ -313,6 +313,8 @@ class StateTracker(object):
         self.prediction_counter = 0
         self.before_prediction_rect = None
 
+        self.gesture = "NONE"
+
         self.dx = 0
         self.dy = 0
         self.wh = deque([(0, 0)], maxlen=6)
@@ -575,28 +577,31 @@ class StateTracker(object):
                 self.out = False
                 self.out_counter = 0
                 self.out_limit = 7
-            return
+            return None, self.gesture
 
         self.shape_analysis()
         prediction = False
         if self.last_rect == None:
             if len(self.rects) == 0:
-                return
+                return None, self.gesture
             if len(self.rects) == 1:
                 if close_to_edge(self.rects[0]) and self.current_types[0] == "OPEN HAND":
-                    self.last_rect = self.rects[0] 
+                    self.last_rect = self.rects[0]
+                    self.gesture = self.current_types[0]
             if len(self.rects) == 2:
                 r1_close = close_to_edge(self.rects[0])
                 r2_close = close_to_edge(self.rects[1])
                 if r1_close and self.current_types[0] == "OPEN HAND":
                     self.last_rect = self.rects[0]
+                    self.gesture = self.current_types[0]
                 elif r2_close and self.current_types[1] == "OPEN HAND":
                     self.last_rect = self.rects[1]
+                    self.gesture = self.current_types[1]
         else:
             if len(self.rects) == 0:
                 prediction = True
             elif len(self.rects) == 1:
-                self.hand_info = 0
+                self.gesture = self.current_types[0]
                 self._one_rect_operations(self.rects[0])
             elif len(self.rects) == 2:
                 r1_close = close_to_each_other_central(self.last_rect, self.rects[0])
@@ -616,10 +621,10 @@ class StateTracker(object):
                         elif r1_head:
                             self.last_rect = self.rects[1]
                 elif r1_close:
-                    self.hand_info = 0
+                    self.gesture = self.current_types[0]
                     self._one_rect_operations(self.rects[0])
                 elif r2_close:
-                    self.hand_info = 1
+                    self.gesture = self.current_types[1]
                     self._one_rect_operations(self.rects[1])
                 else:
                     r1_close = False
@@ -640,19 +645,18 @@ class StateTracker(object):
                         self.last_rect = self.rects_small[1]
                     elif r1_close and not r2_close:
                         self.last_rect = self.rects[0]
-                        self.hand_info = 0
+                        self.gesture = self.current_types[0]
                     elif r2_close and not r1_close:
                         self.last_rect = self.rects[1]
-                        self.hand_info = 1
+                        self.gesture = self.current_types[1]
                     elif r2_close and r1_close:
                         self.last_rect = self.rects[0]
-                        self.hand_info = -1
                     elif self.current_types[0] not in ("FACE", "PALM", "UNKNOWN"):
                         self.last_rect = self.rects[0]
-                        self.hand_info = 0
+                        self.gesture = self.current_types[0]
                     elif self.current_types[1] not in ("FACE", "PALM", "UNKNOWN"):
                         self.last_rect = self.rects[1]
-                        self.hand_info = 1
+                        self.gesture = self.current_types[1]
                     else:
                         self.last_rect = self.predicted_rect
                     prediction = True
@@ -663,16 +667,17 @@ class StateTracker(object):
         if self.check_borders():
             self.clear()
             self.out = True
-            return
+            return None, self.gesture
         self.prediction_limit(prediction)
         #self.fit_rect_size()
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
-        
+            return self.last_rect, self.gesture
+        return None, self.gesture
+
     def draw_info(self, img):
-        if self.hand_info > -1 and len(self.current_types) > 0:
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(img, self.current_types[self.hand_info], (10, 25), font, 1, (255,255,255), 2)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(img, self.gesture, (10, 25), font, 1, (255,255,255), 2)
 
     def draw_text(self, img, text, pos):
         font = cv2.FONT_HERSHEY_SIMPLEX
