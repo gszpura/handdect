@@ -33,6 +33,13 @@ class ShapeDiscovery(object):
 		return shape_type
 
 	def biggest_cnt(self, cnts):
+		"""
+		think about:
+		def moments(cnt):
+			return cv2.moments(cnt)["m00"]
+		max(cnts, key=moments)
+		---> move to Cython
+		"""
 		biggest = None
 		biggest_area = 0
 		for cnt in cnts:

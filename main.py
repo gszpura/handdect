@@ -51,7 +51,7 @@ def mainCascades():
 
 
 #version with Substraction and HSV detection
-def mainSubHSV():
+def mainSubHSV(profile=0):
     clbr = Calibration2()
     while (not clbr.end):
         _,f = c.read()
@@ -79,6 +79,11 @@ def mainSubHSV():
             shot = True
         if k == 27:
             break
+        # debug & profile part
+        if profile > 0:
+            profile -= 1
+            if profile == 0:
+                break
 
     cv2.destroyAllWindows()
     c.release()
