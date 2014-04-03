@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import time
 
+PREFIX_MODULE = "cascades/"
+
 def w_h_divided_by(image, divisor):
     """Return an image's dimensions, divided by a value."""
     h, w = image.shape[:2]
@@ -49,10 +51,10 @@ class FaceTracker(object):
         self.minNeighbors = minNeighbors
         self.flags = flags
         self._faces = []
-        self._faceClassifier = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml')
-        self._eyeClassifier = cv2.CascadeClassifier('haarcascade_eye.xml')
-        self._noseClassifier = cv2.CascadeClassifier('haarcascade_mcs_nose.xml')
-        self._mouthClassifier = cv2.CascadeClassifier('haarcascade_mcs_mouth.xml')
+        self._faceClassifier = cv2.CascadeClassifier(PREFIX_MODULE + 'haarcascade_frontalface_alt.xml')
+        self._eyeClassifier = cv2.CascadeClassifier(PREFIX_MODULE + 'haarcascade_eye.xml')
+        self._noseClassifier = cv2.CascadeClassifier(PREFIX_MODULE + 'haarcascade_mcs_nose.xml')
+        self._mouthClassifier = cv2.CascadeClassifier(PREFIX_MODULE + 'haarcascade_mcs_mouth.xml')
         
     @property
     def faces(self):
@@ -103,15 +105,16 @@ class FaceTracker(object):
             return None
         subX, subY, subW, subH = subRects[0]
         return (x+subX, y+subY, subW, subH)
-        
-name = 'haarcascade_hand_2.xml'
-name = 'fist.xml'
-#name = 'palm.xml'
-name = 'hand_cascade.xml'
-#name = 'hand_best.xml'        
+
+      
 class HandTracker(object):
     """A tracker for hand features"""
     def __init__(self, scaleFactor = 1.1, minNeighbors = 4, flags = cv2.cv.CV_HAAR_DO_CANNY_PRUNING):
+        #name = PREFIX_MODULE + "haarcascade_hand_2.xml"
+        #name = PREFIX_MODULE + "fist.xml"
+        #name = PREFIX_MODULE + "palm.xml"
+        name = PREFIX_MODULE + "hand_cascade.xml"
+        
         self.scaleFactor = scaleFactor
         self.minNeighbors = minNeighbors
         self.flags = flags

@@ -26,7 +26,6 @@ c = cv2.VideoCapture(0)
 #version for Cascades
 def mainCascades():
     track = TrackerAL()
-    trf = Transformer()
     hnd = HandTracker()
 
     while(1):    
