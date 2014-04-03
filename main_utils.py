@@ -198,3 +198,17 @@ def get_roi(img, rect):
     x,y,w,h = rect
     roi = img[y:y+h, x:x+w]
     return roi
+
+
+def cnt_area(cnt):
+    """Function returns area for contour"""
+    return cv2.moments(cnt)["m00"]
+
+
+def get_biggest_cnt(cnts):
+    try:
+        biggest = max(cnts, key=cnt_area)
+    except Exception as e:
+        print e
+        biggest = None
+    return biggest

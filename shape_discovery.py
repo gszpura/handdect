@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import time
 
+from main_utils import get_biggest_cnt
 from body_model.body_model import BodyPartsModel
 
 BODY_PARTS = ["UNKNOWN", "OPEN HAND", "ONE FINGER", "THUMB", "PALM", "FACE", "FACE & HAND", "TWO FINGERS"]
@@ -32,27 +33,10 @@ class ShapeDiscovery(object):
 		shape_type = self.defects_info(roi_trf, shape_type)
 		return shape_type
 
-	def biggest_cnt(self, cnts):
-		"""
-		think about:
-		def moments(cnt):
-			return cv2.moments(cnt)["m00"]
-		max(cnts, key=moments)
-		---> move to Cython
-		"""
-		biggest = None
-		biggest_area = 0
-		for cnt in cnts:
-			m = cv2.moments(cnt)
-			if m["m00"] > biggest_area:
-				biggest = cnt
-				biggest_area = m["m00"]
-		return biggest
-
 	def apply_approxing_transformation(self, roi):
 		cp = roi.copy()
 		c1, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-		c1 = self.biggest_cnt(c1)
+		c1 = get_biggest_cnt(c1)
 		if c1 == None:
 			return None
 		c1 = cv2.approxPolyDP(c1, 5, True)
@@ -64,7 +48,7 @@ class ShapeDiscovery(object):
 	def defects_info(self, roi, shape_cue):
 		cp = roi.copy()
 		cnts, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-		cnt = self.biggest_cnt(cnts)
+		cnt = get_biggest_cnt(cnts)
 		hull = cv2.convexHull(cnt, returnPoints = False)
 		defects = cv2.convexityDefects(cnt, hull)
 		# display
