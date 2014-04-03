@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import time
 
-from body_model import BodyPartsModel
+from body_model.body_model import BodyPartsModel
 
 BODY_PARTS = ["UNKNOWN", "OPEN HAND", "ONE FINGER", "THUMB", "PALM", "FACE", "FACE & HAND", "TWO FINGERS"]
 
