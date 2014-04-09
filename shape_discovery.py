@@ -11,16 +11,6 @@ BODY_PARTS = ["UNKNOWN", "OPEN HAND", "ONE FINGER", "THUMB", "PALM", "FACE", "TW
 def rev_area(defect):
     return 1/float(defect[0][3])
 
-def _select_defect(defect, cnt, cnt_area, roi_height):
-	s, e, f, a = defect[0]
-	sp = tuple(cnt[s][0])
-	ep = tuple(cnt[e][0])
-	defect_level = max(sp[1], ep[1])
-	if defect_level < 0.33*roi_height and \
-		a > 0.33*cnt_area:
-		return True
-	return False
-
 class ShapeDiscovery(object):
 
 	def __init__(self):
@@ -40,7 +30,7 @@ class ShapeDiscovery(object):
 		roi_trf = self.apply_approxing_transformation(roi)
 		bpm = BodyPartsModel(roi_trf)
 		shape_type = BODY_PARTS[bpm.get_value()]
-		shape_type = self.defects_info(roi_trf, shape_type)
+		shape_type = self.correct_shape_type(shape_type)
 		self.last = shape_type
 		return shape_type
 
@@ -55,35 +45,9 @@ class ShapeDiscovery(object):
 		cv2.drawContours(v1,[c1],-1,(255,0,0),-1)
 		return v1
 
-	def select_defects(self, defects, cnt, roi):
-		out = sorted(defects, key=rev_area)
-		cnt_area = cv2.moments(cnt)["m00"]
-		out = [d[0][3] for d in out[0:5] if _select_defect(d, cnt, cnt_area, roi.shape[0])]
-		return out
-
-	def defects_info(self, roi, shape_cue):
-		cp = roi.copy()
-		cnts, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-		cnt = get_biggest_cnt(cnts)
-		hull = cv2.convexHull(cnt, returnPoints = False)
-		defects = cv2.convexityDefects(cnt, hull)
-		defs = self.select_defects(defects, cnt, roi)
-		# cv2.imshow('approxing', roi)
-		defects_count = len(defs)
-		if shape_cue == BODY_PARTS[2]: #ONE FINGER
-			return shape_cue
-		elif shape_cue == BODY_PARTS[3]:
-			return BODY_PARTS[3] #THUMB
-		elif shape_cue == BODY_PARTS[6]:
-			print "two-fing:body_model", defects_count
-			return BODY_PARTS[6] #TWO FINGERS
-		elif shape_cue == BODY_PARTS[1] and defects_count < 3:
-			print "two-fing:defects"
-			return BODY_PARTS[6] #TWO FINGERS
-		elif shape_cue == BODY_PARTS[1]:
-			return BODY_PARTS[1] #OPEN HAND
-		elif shape_cue == BODY_PARTS[5]:
-			return BODY_PARTS[4] #FACE -> PALM
+	def correct_shape_type(self, shape_cue):
+		if shape_cue == BODY_PARTS[5]: #FACE -> PALM
+			return BODY_PARTS[4]
 		else:
 			return shape_cue
 
