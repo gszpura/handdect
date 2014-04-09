@@ -22,6 +22,8 @@ from calibration2 import Calibration2
 #global init
 shot = False
 c = cv2.VideoCapture(0)
+if cv2.__version__.startswith('2.4.8'):
+    _,f = c.read()
 
 #version for Cascades
 def mainCascades():
