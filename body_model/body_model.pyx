@@ -1,11 +1,9 @@
 """
-TODO:
-probable one finger -> scope[3:10] > 0.6 and thick_up < 2/3 * thick_down
+BodyModel.
 
-
+1. Implements lattice algorithm
+2. It's a hand and face model: can distinguish between them.
 """
-
-
 
 import cython
 cimport cython
@@ -24,7 +22,7 @@ cdef int ONE_FINGER = 2
 cdef int THUMB = 3
 cdef int PALM = 4
 cdef int FACE = 5
-cdef int FACE_AND_HAND = 6
+cdef int TWO_FINGERS = 6
 
 cdef int HORIZONTAL_JUMP = 10
 cdef int VERTICAL_JUMP = 8
@@ -40,6 +38,24 @@ cdef int sign(int elem):
 
 
 cdef class Leaf:
+    """
+    Represents a single line in the image.
+    For example, we have image of size 100x100 which
+    depicts hand.
+    Leaf is a part of that image. It's a line 1x100
+    (one pixel high and 100 pixels wide).
+
+
+    Leaf has it's footprint.
+    Footprint of a leaf is a trace of white and black
+    regions inside it. For example we have a Leaf:
+    [255, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255]
+    where 255 stands for white and 0 stands for black.
+    Footprint of this leave will be: [6, 3].
+    It means that first region in the Leaf is 6 pixels wide
+    and second is 3 pixels wide. Third region is
+    len(Leaf) - 9 pixels wide.
+    """
 
     cdef list slice
     cdef public list footprint
@@ -102,6 +118,7 @@ cdef class LeafStats:
     cdef list leafs
 
     cdef bool open_hand_shape
+    cdef bool two_fingers_shape
     cdef bool face_shape
 
     cdef double edge_dev
@@ -111,7 +128,7 @@ cdef class LeafStats:
     cdef bool up_down_white
     cdef bool fluctuations
     cdef list distribution
-    cdef list edge 
+    cdef list edge
 
     def __init__(LeafStats self, list leafs):
         self.leafs = leafs
@@ -122,12 +139,29 @@ cdef class LeafStats:
         return distribution
 
     cdef bool calc_open_hand_shape(LeafStats self, list distribution):
+        """
+        Checks if the image matches an OPEN HAND shape.
+        Vast majority of the leafs must have more than 4 regions.
+        """
         cdef int all_leafs = sum(distribution)
         cdef int part_value = int(0.8*all_leafs)
         cdef bool fingers = False
         
         fingers = sum(distribution[4:15]) > part_value
         return fingers
+
+    cdef bool calc_two_fingers_shape(LeafStats self, list distribution):
+        """
+        Checks if the image matches a TWO FINGERS shape.
+        Majority of the leafs must have exactly two white regions
+        and it means 5 regions in total (add 3 black regions).
+        """
+        cdef int all_leafs = sum(distribution)
+        cdef int threshold_for_two_fingers = int(0.4*all_leafs)
+        cdef bool two_fingers = False
+
+        two_fingers = sum(distribution[5:6]) > threshold_for_two_fingers
+        return two_fingers
 
     cdef bool calc_face_shape(LeafStats self, list distribution):
         cdef int all_leafs = sum(distribution)
@@ -223,6 +257,7 @@ cdef class LeafStats:
         self.thickness_avg = self.calc_thickness_avg(thickness)
 
         self.open_hand_shape = self.calc_open_hand_shape(distribution)
+        self.two_fingers_shape = self.calc_two_fingers_shape(distribution)
         self.face_shape = self.calc_face_shape(distribution)
             
         self.up_down_white = False
@@ -234,6 +269,7 @@ cdef class LeafStats:
 cdef class BodyPartsModel(object):
 
     cdef np.ndarray img
+    cdef np.ndarray debug_img
     cdef int outcome
 
     cdef int w
@@ -285,7 +321,7 @@ cdef class BodyPartsModel(object):
         cdef int JUMP = 2*HORIZONTAL_JUMP/3
         for i in xrange(0, fst_jumps):
             sl = img[c:c+1][0].copy()
-            #img[c:c+1][0] = 0
+            #self.debug_img[c:c+1][0] = 0
             c += JUMP
             leafs.append(Leaf(sl.tolist()))
         return leafs
@@ -329,6 +365,7 @@ cdef class BodyPartsModel(object):
         cdef list uleafs, lleafs, vleafs
         cdef LeafStats stats_u, stats_l, stats_v
 
+        #self.debug_img = self.img.copy()
         vleafs = self.get_vertical_leafs()
         lleafs = self.get_lower_leafs()
         uleafs = self.get_upper_leafs()
@@ -336,22 +373,11 @@ cdef class BodyPartsModel(object):
         stats_u =  LeafStats(uleafs)
         stats_v = LeafStats(vleafs)
 
-        #print "###############################"
-        #print stats_u.distribution
-        #print stats_l.distribution
-        #print stats_u.thickness_avg, "up"
-        #print stats_l.thickness_avg, "down"
-        #print stats_u.thickness_dev, "up dev"
-        #print stats_l.thickness_dev, "down dev"
-        #print stats_v.thickness_dev, "vertical dev"
-        #print stats_v.edge_dev, "EdgeDev"
-        #print stats_v.edge
-        #print stats_u.edge, "up"
-        #print stats_l.edge, "low"
-        #print "###############################"
-        #cv2.imshow('P', self.img)
         if stats_l.open_hand_shape or stats_u.open_hand_shape:
             self.outcome = OPEN_HAND
+            if stats_u.two_fingers_shape:
+                #cv2.imshow('P', self.debug_img)
+                self.outcome = TWO_FINGERS
         elif stats_l.thickness_avg*0.4 > stats_u.thickness_avg and stats_u.thickness_avg > 0.0:
             self.outcome = ONE_FINGER
         elif stats_l.face_shape and stats_u.face_shape:

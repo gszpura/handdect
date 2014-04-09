@@ -5,7 +5,7 @@ import time
 from main_utils import get_biggest_cnt, draw_circles
 from body_model.body_model import BodyPartsModel
 
-BODY_PARTS = ["UNKNOWN", "OPEN HAND", "ONE FINGER", "THUMB", "PALM", "FACE", "FACE & HAND", "TWO FINGERS"]
+BODY_PARTS = ["UNKNOWN", "OPEN HAND", "ONE FINGER", "THUMB", "PALM", "FACE", "TWO FINGERS"]
 
 
 def rev_area(defect):
@@ -74,8 +74,12 @@ class ShapeDiscovery(object):
 			return shape_cue
 		elif shape_cue == BODY_PARTS[3]:
 			return BODY_PARTS[3] #THUMB
+		elif shape_cue == BODY_PARTS[6]:
+			print "two-fing:body_model", defects_count
+			return BODY_PARTS[6] #TWO FINGERS
 		elif shape_cue == BODY_PARTS[1] and defects_count < 3:
-			return BODY_PARTS[7] #TWO FINGERS
+			print "two-fing:defects"
+			return BODY_PARTS[6] #TWO FINGERS
 		elif shape_cue == BODY_PARTS[1]:
 			return BODY_PARTS[1] #OPEN HAND
 		elif shape_cue == BODY_PARTS[5]:
