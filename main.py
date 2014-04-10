@@ -64,15 +64,19 @@ def mainSubHSV(profile=0):
     CFG_THR = clbr.thr
     track = StateTracker()
     trf = Transformer(LIGHT, CFG_HSV, CFG_YUV, CFG_THR)
+    trf.turn_on_bayes_classifier(clbr.pdf_cmp_h, clbr.pdf_cmp_v)
     while (1):
         _,f = c.read()
-        st = time.time()
+        
         move_cue = trf.move_cue(f)
-        skin_cue = trf.skin_color_cue(f)
+        #t1 = time.time()
+        #skin_cue = trf.bayes_skin_classifier(f)
+        skin_cue = trf.linear_skin_classifier(f)
+        #print time.time() - t1
         final = cv2.bitwise_and(skin_cue, move_cue)
         track.update(final)
         info = track.follow(f)
-        #print time.time() - st
+        
         cv2.imshow('IMG', f)
         cv2.imshow('SKIN FINAL', final)
         k = cv2.waitKey(20)

@@ -132,6 +132,11 @@ class Calibration2(object):
 
         self.yv_remove_threshold = 0.04
         self.h_remove_threshold = 0.03
+        # hitograms for Bayes skin pixel classifier
+        self.skin_hist_h = np.zeros(256, np.int)
+        self.non_skin_hist_h = np.zeros(256, np.int)
+        self.skin_hist_v = np.zeros(256, np.int)
+        self.non_skin_hist_v = np.zeros(256, np.int)
 
     def biggest_cnt(self, cnts):
         biggest = None
@@ -145,6 +150,12 @@ class Calibration2(object):
         return biggest
 
     def get_head_rect(self, img, cnt):
+        """
+        Uses thresholded image to find contours of a head.
+        Function gets contour of the user shape.
+        It splits the contour into two: head part and lower part.
+        After split it finds head rect for head part and returns it.
+        """
         rect = list(cv2.boundingRect(cnt))
         if rect[3] > self.h/3:
             rect[3] = rect[3]/2
@@ -161,6 +172,19 @@ class Calibration2(object):
         rect[3] = rect_inside[3]
         return rect
 
+    def get_non_head_mask(self, img, rect):
+        """
+        Finds mask for non head pixels
+        img - thresholded image (binary black and white)
+        rect - head rect
+        """
+        mask = np.zeros((self.h, self.w), np.uint8)
+        x, y, w, h = rect
+        mask[y:y+h, x:x+w] = 255
+        mask = cv2.bitwise_and(img, mask)
+        self.mask_non = cv2.bitwise_not(mask)
+        return cv2.bitwise_not(mask)
+
     def discover_light(self, value_img):
         dummy, value_240 = cv2.threshold(value_img, 240, 255, cv2.THRESH_BINARY)
         dummy, value_thr = cv2.threshold(value_img, self.thr, 255, cv2.THRESH_BINARY)
@@ -174,30 +198,35 @@ class Calibration2(object):
         else:
             self.light = "Night"
 
-    def update(self, img):
-        hsv1 = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    def find_important_planes(self, img):
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-        h1,s1,v1 = cv2.split(hsv1)
-        value_img = v1.copy()
+        h_, s_, v_ = cv2.split(hsv)
         y, u, v = cv2.split(yuv)
-        self.frame = h1
-        orig = h1.copy()
+        return h_, v_, v
+
+    def update(self, img):
+        h_, v_, v = self.find_important_planes(img)
+        h_copy = h_.copy()
+        v_copy = v_.copy()
+        
         if self.thr < 240:
-            self.thr, v1 = cv2.threshold(v1, 0, 255, cv2.THRESH_OTSU)
+            self.thr, thresholded = cv2.threshold(v_, 0, 255, cv2.THRESH_OTSU)
         else:
-            dummy, v1 = cv2.threshold(v1, 240, 255, cv2.THRESH_BINARY)
-        v2 = v1.copy()
-        cnts, hier = cv2.findContours(v2, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            dummy, thresholded = cv2.threshold(v_, 240, 255, cv2.THRESH_BINARY)
+
+        cnts, hier = cv2.findContours(thresholded.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnt = self.biggest_cnt(cnts)
         if cnt is not None:
-            self.rect = self.get_head_rect(v1, cnt)
-            #draw_rects(v1, [self.rect], color=(100,0,0))
-            #cv2.imshow('thr', v1)
-            roi_h = get_roi(orig, self.rect)
+            self.rect = self.get_head_rect(thresholded, cnt)
+            roi_h = get_roi(h_, self.rect)
             roi_v = get_roi(v, self.rect)
-            mask = get_roi(v1, self.rect)
+            mask = get_roi(thresholded, self.rect)
+            non_head_mask = self.get_non_head_mask(thresholded, self.rect)
 
             hist = cv2.calcHist([roi_h], [0], mask, [256], [0,256])
+            non_head_hist = cv2.calcHist([h_], [0], non_head_mask, [256], [0,256])
+            self.update_histograms("h", hist, non_head_hist)
             hist = np.array([i/hist.max() for i in hist])
             conf = get_ranges(hist, threshold=self.h_remove_threshold)
             if conf[1] - conf[0] > 30:
@@ -205,21 +234,62 @@ class Calibration2(object):
             self.conf_h = clean_conf_h(conf)
 
             hist = cv2.calcHist([roi_v], [0], mask, [256], [0,256])
+            non_head_hist = cv2.calcHist([v], [0], non_head_mask, [256], [0,256])
+            self.update_histograms("v", hist, non_head_hist)
             hist = np.array([i/hist.max() for i in hist])
             self.conf_yv = get_ranges(hist, threshold=self.yv_remove_threshold)
             if self.conf_yv[1] - self.conf_yv[0] > 30:
                 self.yv_remove_threshold += 0.01
             self.conf_yv = clear_conf_v(self.conf_yv)
 
-            self.discover_light(value_img)
+            self.discover_light(v_copy)
             self.cnt += 1
         if self.cnt >= self.cnt_max:
+            self.calculate_pdfs()
             self.end = 1
-            print "\n"
+
+    def update_histograms(self, plane, head_hist, non_head_hist):
+        """
+        Creates cummulative histograms for later
+        skin and non-skin PDFs creation.
+        """
+        if plane == "v":
+            for i, bin in enumerate(head_hist):
+                self.skin_hist_v[i] += bin[0]
+            for i, bin in enumerate(non_head_hist):
+                self.non_skin_hist_v[i] += bin[0]
+        if plane == "h":
+            for i, bin in enumerate(head_hist):
+                self.skin_hist_h[i] += bin[0]
+            for i, bin in enumerate(non_head_hist):
+                self.non_skin_hist_h[i] += bin[0]
+
+    def calculate_pdfs(self):
+        """
+        Calculates probability density functions for
+        skin and non skin pixels.
+        """
+        tau_h = 1.5
+        tau_v = 1.5
+        # calculate pdf's
+        skin_pdf_h = self.skin_hist_h/float(self.skin_hist_h.sum())
+        skin_pdf_v = self.skin_hist_v/float(self.skin_hist_v.sum())
+        non_skin_pdf_h = self.non_skin_hist_h/float(self.non_skin_hist_h.sum())
+        non_skin_pdf_v = self.non_skin_hist_v/float(self.non_skin_hist_v.sum())
+        non_skin_pdf_h[non_skin_pdf_h == 0] = 0.000001
+        non_skin_pdf_v[non_skin_pdf_v == 0] = 0.000001
+        # precalculate cmp's for bayes classifier
+        self.pdf_cmp_h = skin_pdf_h/non_skin_pdf_h
+        self.pdf_cmp_v = skin_pdf_v/non_skin_pdf_v
+        self.pdf_cmp_h[self.pdf_cmp_h > tau_h] = 255
+        self.pdf_cmp_h[self.pdf_cmp_h != 255.0] = 0
+        self.pdf_cmp_v[self.pdf_cmp_v > tau_v] = 255
+        self.pdf_cmp_v[self.pdf_cmp_v != 255] = 0
+        self.pdf_cmp_v = self.pdf_cmp_v.astype(np.uint8)
+        self.pdf_cmp_h = self.pdf_cmp_h.astype(np.uint8)
 
 
 def test_main():
-    c = cv2.VideoCapture(1)
     LIGHT = "Night"
     CFG_HSV = [0, 0, 0, 0]
     CFG_THR = 90
@@ -255,16 +325,19 @@ def test_main():
         d = cv2.bitwise_or(d, d2)
         return d
 
+    c = cv2.VideoCapture(0)
+    if cv2.__version__.find("2.4.8") > -1:
+        _, f = c.read()
     clbr = Calibration2()
     cnt = 0
     while (not clbr.end):
-        _,f = c.read()
+        _, f = c.read()
         clbr.update(f)
         k = cv2.waitKey(20)
         if k == 27:
             break
         cnt += 1
-        if cnt > 120:
+        if cnt > 30:
             break
     print clbr.conf_h, clbr.conf_yv, clbr.thr, clbr.light
     LIGHT = clbr.light
@@ -283,9 +356,8 @@ def test_main():
 
         res1 = cv2.bitwise_and(img_h, img_yv)
         res2 = cv2.bitwise_and(res1, img_v)
-        ####
+
         img_h_small = cv2.resize(img_h, (320, 240))
-        #element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
         img_yv_small = cv2.resize(img_yv, (320, 240))
         img_v_small = cv2.resize(img_v, (320, 240))
         res_small = cv2.resize(res2, (320, 240))
@@ -294,6 +366,7 @@ def test_main():
         cv2.imshow('V (YUV)', img_yv_small)
         cv2.imshow('V (HSV)', img_v)   
         cv2.imshow('All', res_small)
+        cv2.imshow('Mask', clbr.mask_non)
         k = cv2.waitKey(20)
         if k == 27:
             break

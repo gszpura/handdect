@@ -20,6 +20,10 @@ class Transformer:
         self.hsv = color_h
         self.yuv = color_yv
         self.thr = threshold
+
+    def turn_on_bayes_classifier(self, s_h, s_v):
+        self.s_h = s_h
+        self.s_v = s_v
         
     def _morpho_day(self, img):
         element = self.element
@@ -39,36 +43,58 @@ class Transformer:
         d = cv2.dilate(d, element)
         return d
 
-    def skin_color_cue(self, img):
-        result = np.zeros((img.shape[0], img.shape[1]), np.uint8)
-        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-        h, s, v = cv2.split(img_hsv)
-        dummy, value = cv2.threshold(v, self.thr, 255, cv2.THRESH_BINARY)
-        y, u, yv = cv2.split(img_yuv)
-        r1_h = cv2.inRange(h, np.array(self.hsv[2], np.uint8), 
+    def find_important_planes(self, img):
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+        h_, s_, v_ = cv2.split(hsv)
+        y, u, v = cv2.split(yuv)
+        return h_, v_, v
+
+    def linear_skin_classifier(self, img):
+        h_, v_, v = self.find_important_planes(img)
+
+        dummy, value = cv2.threshold(v_, self.thr, 255, cv2.THRESH_BINARY)
+        r1_h = cv2.inRange(h_, np.array(self.hsv[2], np.uint8),
                            np.array(self.hsv[3], np.uint8))
-        r2_h = cv2.inRange(h, np.array(self.hsv[0], np.uint8), 
+        r2_h = cv2.inRange(h_, np.array(self.hsv[0], np.uint8),
                            np.array(self.hsv[1], np.uint8))
-        r1_yv = cv2.inRange(yv, np.array(self.yuv[2], np.uint8), 
-                            np.array(self.yuv[3], np.uint8))
-        r2_yv = cv2.inRange(yv, np.array(self.yuv[0], np.uint8), 
-                            np.array(self.yuv[1], np.uint8))
+        r1_v = cv2.inRange(v, np.array(self.yuv[2], np.uint8),
+                           np.array(self.yuv[3], np.uint8))
+        r2_v = cv2.inRange(v, np.array(self.yuv[0], np.uint8),
+                           np.array(self.yuv[1], np.uint8))
 
         whole_h = cv2.bitwise_or(r1_h, r2_h)
-        #cv2.imshow('h', whole_h)
-        whole_yv = cv2.bitwise_or(r1_yv, r2_yv)
-        #cv2.imshow('yv', whole_yv)
-        d = cv2.bitwise_and(whole_yv, whole_h)
-        #cv2.imshow('value', value)
-        d = cv2.bitwise_and(d, value)   
+        whole_v = cv2.bitwise_or(r1_v, r2_v)
+        d = cv2.bitwise_and(whole_v, whole_h)
+        #cv2.imshow('value', d)
+        d = cv2.bitwise_and(d, value)
         #cv2.imshow('whole', d)
         if self.light == "Night":
             d = self._morpho_night(d)
         elif self.light == "Day":
             d = self._morpho_day(d)
-        result = d
-        return result
+        return d
+
+    def classify(self, img, plane):
+        if plane == "v":
+            img = self.s_v[img]
+        if plane == "h":
+            img = self.s_h[img]
+        return img
+
+    def bayes_skin_classifier(self, img):
+        h_, v_, v = self.find_important_planes(img)
+        
+        h_class = self.classify(h_, "h")
+        v_class = self.classify(v, "v")
+        d = cv2.bitwise_and(h_class, v_class)
+        #cv2.imshow('whole', d)
+
+        if self.light == "Night":
+            d = self._morpho_night(d)
+        elif self.light == "Day":
+            d = self._morpho_day(d)
+        return d
         
     def move_cue(self, img):
         element = self.element
