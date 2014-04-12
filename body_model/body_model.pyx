@@ -292,20 +292,13 @@ cdef class BodyPartsModel(object):
         if self.img is None:
             return True
         size = img.shape[0]*img.shape[1]
-
         if size < 4000:
             return True
         if size < 10000:
             nonZero = cv2.countNonZero(img)
-            if nonZero > int(0.95*size):
-                return False
-            if img.shape[0] > int(1.5*img.shape[1]) and nonZero > int(0.3*size):
+            if nonZero > int(0.5*size):
                 return False
             return True
-        if 10000 < size < 40000:
-            nonZero = cv2.countNonZero(img)
-            if nonZero < int(0.3*size):
-                return True
         return False
 
 
@@ -391,5 +384,4 @@ cdef class BodyPartsModel(object):
             self.outcome = FACE
         else:
             self.outcome = UNKNOWN
-        
 

@@ -35,15 +35,18 @@ class ShapeDiscovery(object):
 		return shape_type
 
 	def apply_approxing_transformation(self, roi):
-		cp = roi.copy()
-		c1, hier = cv2.findContours(cp, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-		c1 = get_biggest_cnt(c1)
-		if c1 == None:
+		"""
+		Takes ROI with hand or face, finds biggest contour
+		and fills in holes with use of approxPolyDP and drawContours. 
+		"""
+		contours, hierarchy = cv2.findContours(roi.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+		the_cnt = get_biggest_cnt(contours)
+		if the_cnt == None:
 			return None
-		c1 = cv2.approxPolyDP(c1, 5, True)
-		v1 = np.zeros(roi.shape, np.uint8)
-		cv2.drawContours(v1,[c1],-1,(255,0,0),-1)
-		return v1
+		the_cnt = cv2.approxPolyDP(the_cnt, 5, True)
+		rebuilded_roi = np.zeros(roi.shape, np.uint8)
+		cv2.drawContours(rebuilded_roi, [the_cnt], -1, (255,0,0), -1)
+		return rebuilded_roi
 
 	def correct_shape_type(self, shape_cue):
 		if shape_cue == BODY_PARTS[5]: #FACE -> PALM

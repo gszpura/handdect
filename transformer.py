@@ -28,9 +28,7 @@ class Transformer:
     def _morpho_day(self, img):
         element = self.element
         d = cv2.erode(img, element)
-        d = cv2.erode(img, element)
-        d = cv2.erode(img, element)
-        d = cv2.erode(img, element)
+        d = cv2.erode(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)
         return d
@@ -38,6 +36,17 @@ class Transformer:
     def _morpho_night(self, img):
         element = self.element
         d = cv2.erode(img, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        d = cv2.dilate(d, element)
+        return d
+
+    def _morpho_bayes(self, img):
+        element = self.element
+        d = cv2.erode(img, element)
+        d = cv2.erode(d, element)
+        d = cv2.erode(d, element)
+        d = cv2.erode(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)
         d = cv2.dilate(d, element)
@@ -90,10 +99,7 @@ class Transformer:
         d = cv2.bitwise_and(h_class, v_class)
         #cv2.imshow('whole', d)
 
-        if self.light == "Night":
-            d = self._morpho_night(d)
-        elif self.light == "Day":
-            d = self._morpho_day(d)
+        d = self._morpho_bayes(d)
         return d
         
     def move_cue(self, img):
