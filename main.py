@@ -9,6 +9,7 @@ import cv2
 import os
 import sys
 import time
+import numpy as np
 
 from tracker import TrackerAL, StateTracker
 from transformer import Transformer
@@ -50,12 +51,27 @@ def mainCascades():
     cv2.destroyAllWindows()
     c.release()
 
+def correct_gamma(img, correction):
+    dst = img/255.0
+    dst = cv2.pow(dst, correction)
+    dst = dst*255
+    dst = np.uint8(dst)
+    return dst
 
 #version with Substraction and HSV detection
 def mainSubHSV(profile=0):
     clbr = Calibration2()
     while (not clbr.end):
-        _,f = c.read()
+        #_,f = c.read()
+        f = cv2.imread("C:\\nodejs\\tmp\\img0.jpg")
+        if f is None:
+            k = cv2.waitKey(20)
+            if k == 27:
+                break
+            continue
+        elif f.shape[0] == 240:
+            f = correct_gamma(f, 0.5)
+            f = cv2.resize(f, (640, 480))
         clbr.update(f)
     print "*******", clbr.conf_h, clbr.conf_yv, clbr.thr, clbr.light, "*******"
     LIGHT = clbr.light
@@ -66,8 +82,16 @@ def mainSubHSV(profile=0):
     trf = Transformer(LIGHT, CFG_HSV, CFG_YUV, CFG_THR)
     trf.turn_on_bayes_classifier(clbr.pdf_cmp_h, clbr.pdf_cmp_v)
     while (1):
-        _,f = c.read()
-        
+        #_,f = c.read()
+        f = cv2.imread("C:\\nodejs\\tmp\\img0.jpg")
+        if f is None:
+            k = cv2.waitKey(20)
+            if k == 27:
+                break
+            continue
+        elif f.shape[0] == 240:
+            f = cv2.resize(f, (640, 480))
+
         move_cue = trf.move_cue(f)
         #t1 = time.time()
         #skin_cue = trf.bayes_skin_classifier(f)
