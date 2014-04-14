@@ -112,7 +112,7 @@ def clear_conf_v(conf):
         conf[1] -= 6
     return conf
 
-class Calibration2(object):
+class Calibration(object):
 
     def __init__(self, height=480, width=640):
         self.element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
@@ -205,11 +205,11 @@ class Calibration2(object):
         y, u, v = cv2.split(yuv)
         return h_, v_, v
 
-    def update(self, img):
-        h_, v_, v = self.find_important_planes(img)
-        h_copy = h_.copy()
-        v_copy = v_.copy()
-        
+    def discover_regions(self, h_, v_, v):
+        """
+        Discovers skin and non-skin regions.
+        Discovers head-rect.
+        """
         if self.thr < 240:
             self.thr, thresholded = cv2.threshold(v_, 0, 255, cv2.THRESH_OTSU)
         else:
@@ -217,33 +217,45 @@ class Calibration2(object):
 
         cnts, hier = cv2.findContours(thresholded.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnt = self.biggest_cnt(cnts)
-        if cnt is not None:
-            self.rect = self.get_head_rect(thresholded, cnt)
-            roi_h = get_roi(h_, self.rect)
-            roi_v = get_roi(v, self.rect)
-            mask = get_roi(thresholded, self.rect)
-            non_head_mask = self.get_non_head_mask(thresholded, self.rect)
+        if cnt is None:
+            return None, None
 
-            hist = cv2.calcHist([roi_h], [0], mask, [256], [0,256])
-            non_head_hist = cv2.calcHist([h_], [0], non_head_mask, [256], [0,256])
-            self.update_histograms("h", hist, non_head_hist)
-            hist = np.array([i/hist.max() for i in hist])
-            conf = get_ranges(hist, threshold=self.h_remove_threshold)
-            if conf[1] - conf[0] > 30:
-                self.h_remove_threshold += 0.02
-            self.conf_h = clean_conf_h(conf)
+        self.rect = self.get_head_rect(thresholded, cnt)
+        head_mask = get_roi(thresholded, self.rect)
+        non_head_mask = self.get_non_head_mask(thresholded, self.rect)
+        return head_mask, non_head_mask
 
-            hist = cv2.calcHist([roi_v], [0], mask, [256], [0,256])
-            non_head_hist = cv2.calcHist([v], [0], non_head_mask, [256], [0,256])
-            self.update_histograms("v", hist, non_head_hist)
-            hist = np.array([i/hist.max() for i in hist])
-            self.conf_yv = get_ranges(hist, threshold=self.yv_remove_threshold)
-            if self.conf_yv[1] - self.conf_yv[0] > 30:
-                self.yv_remove_threshold += 0.01
-            self.conf_yv = clear_conf_v(self.conf_yv)
+    def update(self, img):
+        h_, v_, v = self.find_important_planes(img)
+        v_copy = v_.copy()
 
-            self.discover_light(v_copy)
-            self.cnt += 1
+        mask, non_head_mask = self.discover_regions(h_, v_, v)
+
+        if mask is None or non_head_mask is None:
+            return
+        roi_h = get_roi(h_, self.rect)
+        roi_v = get_roi(v, self.rect)
+
+        hist = cv2.calcHist([roi_h], [0], mask, [256], [0,256])
+        non_head_hist = cv2.calcHist([h_], [0], non_head_mask, [256], [0,256])
+        self.update_histograms("h", hist, non_head_hist)
+        hist = np.array([i/hist.max() for i in hist])
+        conf = get_ranges(hist, threshold=self.h_remove_threshold)
+        if conf[1] - conf[0] > 30:
+            self.h_remove_threshold += 0.02
+        self.conf_h = clean_conf_h(conf)
+
+        hist = cv2.calcHist([roi_v], [0], mask, [256], [0,256])
+        non_head_hist = cv2.calcHist([v], [0], non_head_mask, [256], [0,256])
+        self.update_histograms("v", hist, non_head_hist)
+        hist = np.array([i/hist.max() for i in hist])
+        self.conf_yv = get_ranges(hist, threshold=self.yv_remove_threshold)
+        if self.conf_yv[1] - self.conf_yv[0] > 30:
+            self.yv_remove_threshold += 0.01
+        self.conf_yv = clear_conf_v(self.conf_yv)
+
+        self.discover_light(v_copy)
+        self.cnt += 1
         if self.cnt >= self.cnt_max:
             self.calculate_pdfs()
             self.end = 1

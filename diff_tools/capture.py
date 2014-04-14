@@ -20,7 +20,7 @@ save_roi = False
 PHOTO_DIR = "\\test_images\\"
 
 counter = 0
-prefix = "daylight1_"
+prefix = "nohand5_"
 while(1):
     _,f = c.read()
     if save_roi:

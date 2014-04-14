@@ -82,7 +82,7 @@ class ThresholdInfo(object):
         return 0
 
 
-class Calibration(object):
+class CalibrationOld(object):
     """
         Calibrates HSV parameters and cut threashold for binary image
         to find best possible match with enviroment.

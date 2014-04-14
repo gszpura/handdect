@@ -15,8 +15,7 @@ from transformer import Transformer
 from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
 from main_utils import draw_boxes
-from calibration import Calibration
-from calibration2 import Calibration2
+from calibration2 import Calibration
 
 
 #global init
@@ -53,7 +52,7 @@ def mainCascades():
 
 #version with Substraction and HSV detection
 def mainSubHSV(profile=0):
-    clbr = Calibration2()
+    clbr = Calibration()
     while (not clbr.end):
         _,f = c.read()
         clbr.update(f)
