@@ -138,6 +138,8 @@ class Calibration(object):
         self.skin_hist_v = np.zeros(256, np.int)
         self.non_skin_hist_v = np.zeros(256, np.int)
 
+        self.planes = "tuple"
+
     def biggest_cnt(self, cnts):
         biggest = None
         biggest_area = 0
@@ -205,11 +207,13 @@ class Calibration(object):
         y, u, v = cv2.split(yuv)
         return h_, v_, v
 
-    def discover_regions(self, h_, v_, v):
+    def discover_regions(self, planes):
         """
         Discovers skin and non-skin regions.
         Discovers head-rect.
+        :param planes: tuple with planes for processing
         """
+        h_, v_, v = planes
         if self.thr < 240:
             self.thr, thresholded = cv2.threshold(v_, 0, 255, cv2.THRESH_OTSU)
         else:
@@ -229,7 +233,10 @@ class Calibration(object):
         h_, v_, v = self.find_important_planes(img)
         v_copy = v_.copy()
 
-        mask, non_head_mask = self.discover_regions(h_, v_, v)
+        if self.planes == "tuple":
+            mask, non_head_mask = self.discover_regions((h_, v_, v))
+        else:
+            mask, non_head_mask = self.discover_regions(img)
 
         if mask is None or non_head_mask is None:
             return
@@ -281,8 +288,6 @@ class Calibration(object):
         Calculates probability density functions for
         skin and non skin pixels.
         """
-        tau_h = 1.5
-        tau_v = 1.5
         # calculate pdf's
         skin_pdf_h = self.skin_hist_h/float(self.skin_hist_h.sum())
         skin_pdf_v = self.skin_hist_v/float(self.skin_hist_v.sum())
@@ -293,6 +298,14 @@ class Calibration(object):
         # precalculate cmp's for bayes classifier
         self.pdf_cmp_h = skin_pdf_h/non_skin_pdf_h
         self.pdf_cmp_v = skin_pdf_v/non_skin_pdf_v
+
+        len_tau041 = np.where(self.pdf_cmp_h > 0.41)[0].shape[0]
+        len_tau150 = np.where(self.pdf_cmp_h > 1.5)[0].shape[0]
+        if len_tau150*1.75 > len_tau041:
+            tau_h = tau_v = 0.41
+        else:
+            tau_h = tau_v = 1.5
+
         self.pdf_cmp_h[self.pdf_cmp_h > tau_h] = 255
         self.pdf_cmp_h[self.pdf_cmp_h != 255.0] = 0
         self.pdf_cmp_v[self.pdf_cmp_v > tau_v] = 255

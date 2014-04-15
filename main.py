@@ -16,6 +16,7 @@ from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
 from main_utils import draw_boxes
 from calibration2 import Calibration
+from calibrationHaar import CalibrationHaar
 
 
 #global init
