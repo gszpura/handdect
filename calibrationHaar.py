@@ -35,6 +35,7 @@ class CalibrationHaar(Calibration):
 		mask = np.zeros((self.h, self.w), np.uint8)
 		x1, y1, x2, y2 = box
 		mask[y1:y2, x1:x2] = 255
+		#cv2.imshow('non head mask', cv2.bitwise_not(mask))
 		return cv2.bitwise_not(mask)
 
 	def discover_regions(self, img):
@@ -52,8 +53,10 @@ class CalibrationHaar(Calibration):
 			mask[:, int(0.2*w):w-int(0.2*w)] = 255
 			non_head_mask = self.get_non_head_mask([x1, y1 - int(0.1*h), 
 													x2, y2 + int(0.1*h)])
-			#img[y1:y2, x1:x2, 0] = mask
-			cv2.imshow('oo', img)
+			#img2 = gray.copy()
+			#img2[:,:] = 0
+			#img2[y1:y2, x1:x2] = mask
+			#cv2.imshow('head mask', img2)
 			return mask, non_head_mask
 		return None, None
         

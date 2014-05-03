@@ -93,7 +93,7 @@ class Transformer:
 
     def bayes_skin_classifier(self, img):
         h_, v_, v = self.find_important_planes(img)
-        
+
         h_class = self.classify(h_, "h")
         v_class = self.classify(v, "v")
         d = cv2.bitwise_and(h_class, v_class)
