@@ -40,12 +40,16 @@ class ShapeDiscovery(object):
 		and fills in holes with use of approxPolyDP and drawContours. 
 		"""
 		contours, hierarchy = cv2.findContours(roi.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-		the_cnt = get_biggest_cnt(contours)
-		if the_cnt == None:
+		the_cnts = get_biggest_cnt(contours, how_many=3)
+		if the_cnts == None:
 			return None
+		the_cnt = the_cnts[0]
 		the_cnt = cv2.approxPolyDP(the_cnt, 5, True)
+
 		rebuilded_roi = np.zeros(roi.shape, np.uint8)
 		cv2.drawContours(rebuilded_roi, [the_cnt], -1, (255,0,0), -1)
+		for cnt in the_cnts[1:]:
+			cv2.drawContours(rebuilded_roi, [cnt], -1, (255,0,0), -1)
 		return rebuilded_roi
 
 	def correct_shape_type(self, shape_cue):
