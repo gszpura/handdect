@@ -28,8 +28,8 @@ class ShapeDiscovery(object):
 		x,y,w,h = rect
 		roi = img[y:y+h, x:x+w]
 		roi_trf = self.apply_approxing_transformation(roi)
-		if roi_trf.shape[0] > 120:
-			cv2.imshow('trf', roi_trf)
+		#if roi_trf.shape[0] > 120:
+		#	cv2.imshow('trf', roi_trf)
 		bpm = BodyPartsModel(roi_trf)
 		shape_type = BODY_PARTS[bpm.get_value()]
 		shape_type = self.correct_shape_type(shape_type)
