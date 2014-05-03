@@ -3,7 +3,7 @@ Methods:
 * Background substraction + HSV
 * HAAR cascades
 
-Last updated: 10-12-2013
+Last updated: 03-05-2014
 """
 import cv2
 import os
@@ -51,22 +51,43 @@ def mainCascades():
     c.release()
 
 
+def read_image():
+    #TODO: implement me
+    return None
+
+
+def read_camera():
+    _, f = c.read()
+    return f
+
+
+def run_calibration():
+    """
+    Runs calibration.
+    """
+    clbr = Calibration()
+    cnt = 0
+    while (not clbr.end):
+        img = read_camera()
+        if img is None:
+            cnt += 1
+        clbr.update(img)
+        if cnt > 100:
+            return None
+    return clbr
+
+
 #version with Substraction and HSV detection
 def mainSubHSV(profile=0):
-    clbr = Calibration()
-    while (not clbr.end):
-        _,f = c.read()
-        clbr.update(f)
+    clbr = run_calibration()
+
     print "*******", clbr.conf_h, clbr.conf_yv, clbr.thr, clbr.light, "*******"
-    LIGHT = clbr.light
-    CFG_HSV = clbr.conf_h
-    CFG_YUV = clbr.conf_yv
-    CFG_THR = clbr.thr
-    track = StateTracker()
-    trf = Transformer(LIGHT, CFG_HSV, CFG_YUV, CFG_THR)
+    trf = Transformer(clbr.light, clbr.conf_h, clbr.conf_yv, clbr.thr)
     trf.turn_on_bayes_classifier(clbr.pdf_cmp_h, clbr.pdf_cmp_v)
+    track = StateTracker()
+
     while (1):
-        _,f = c.read()
+        f = read_camera()
         
         move_cue = trf.move_cue(f)
         #t1 = time.time()
