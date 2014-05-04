@@ -106,12 +106,6 @@ cdef class Leaf:
                 cnt = cnt + 1
         self.footprint_len = len(self.footprint)
 
-        self.all_white = 0
-        if self.vertical:
-            if (self.footprint_len == 0 and self.first == WHITE) or \
-               (self.footprint_len == 1 and self.slice.count(255) > 0.95*self.slice_len): 
-                self.all_white = 1
-
 
 cdef class LeafStats:
     
@@ -125,14 +119,25 @@ cdef class LeafStats:
     cdef double thickness_dev
     cdef double thickness_avg
 
-    cdef bool up_down_white
+    cdef int non_empty_distribution_sum
+
     cdef bool fluctuations
     cdef list distribution
     cdef list edge
 
     def __init__(LeafStats self, list leafs):
         self.leafs = leafs
-        self.stats()    
+        self.open_hand_shape = False
+        self.two_fingers_shape = False
+        self.face_shape = False
+
+        self.thickness_dev = 0
+        self.edge_dev = 0
+        self.thickness_avg = 0
+        self.non_empty_distribution_sum = 0
+
+        self.fluctuations = False
+        self.stats()
 
     cdef list init_distribution(LeafStats self):
         cdef list distribution = [0]*30
@@ -144,9 +149,8 @@ cdef class LeafStats:
         Vast majority of the leafs must have more than 4 regions.
         """
         cdef int all_leafs = sum(distribution)
-        cdef int part_value = int(0.8*all_leafs)
+        cdef int part_value = int(0.75*self.non_empty_distribution_sum)
         cdef bool fingers = False
-        
         fingers = sum(distribution[4:15]) > part_value
         return fingers
 
@@ -157,7 +161,7 @@ cdef class LeafStats:
         and it means 5 regions in total (add 3 black regions).
         """
         cdef int all_leafs = sum(distribution)
-        cdef int threshold_for_two_fingers = int(0.4*all_leafs)
+        cdef int threshold_for_two_fingers = int(0.4*self.non_empty_distribution_sum)
         cdef bool two_fingers = False
 
         two_fingers = sum(distribution[5:6]) > threshold_for_two_fingers
@@ -221,8 +225,8 @@ cdef class LeafStats:
         cdef unsigned int length = len(tmp_leafs)
         cdef unsigned int i, j
 
-        #variable for vertical leafs stats
-        cdef int up_down_count = 0
+        if length == 0:
+            return
 
         #internal loop variables
         cdef Leaf leaf
@@ -246,10 +250,9 @@ cdef class LeafStats:
                 thickness.append(leaf.slice_len - footprint[0])
             if footprint_len == 2 and fst == BLACK:
                 thickness.append(footprint[1])
-            #vertical
-            if leaf.all_white:
-                up_down_count += 1
+
         self.distribution = distribution
+        self.non_empty_distribution_sum = sum(self.distribution) - self.distribution[1]
         self.edge = edge
 
         self.thickness_dev = self.calc_thickness_dev(thickness)
@@ -259,10 +262,7 @@ cdef class LeafStats:
         self.open_hand_shape = self.calc_open_hand_shape(distribution)
         self.two_fingers_shape = self.calc_two_fingers_shape(distribution)
         self.face_shape = self.calc_face_shape(distribution)
-            
-        self.up_down_white = False
-        if up_down_count >= 2:
-            self.up_down_white = True
+
         self.fluctuations = self.calc_fluctuations(edge)
 
 
@@ -294,13 +294,7 @@ cdef class BodyPartsModel(object):
         size = img.shape[0]*img.shape[1]
         if size < 4000:
             return True
-        if size < 10000:
-            nonZero = cv2.countNonZero(img)
-            if nonZero > int(0.5*size):
-                return False
-            return True
         return False
-
 
     cdef list get_upper_leafs(self):
         cdef np.ndarray[np.uint8_t, ndim=2] img = self.img
@@ -330,7 +324,6 @@ cdef class BodyPartsModel(object):
         cdef np.ndarray[np.uint8_t, ndim=1] sl
         for j in xrange(0, sec_jumps):
             sl = img[c:c+1][0].copy()
-            #img[c:c+1][0] = 0
             c += HORIZONTAL_JUMP
             leafs.append(Leaf(sl.tolist()))
         return leafs
@@ -346,7 +339,6 @@ cdef class BodyPartsModel(object):
         cdef np.ndarray[np.uint8_t, ndim=1] sl
         for i in range(0, amount):
             shp = img[:,c:c+1].shape
-            #img[:c,c+1] = 0
             sl = img[:,c:c+1].reshape(shp[0])
             c += VERTICAL_JUMP
             leafs.append(Leaf(sl.tolist(), True))
@@ -366,10 +358,10 @@ cdef class BodyPartsModel(object):
         stats_u =  LeafStats(uleafs)
         stats_v = LeafStats(vleafs)
 
+        #cv2.imshow('Debug Image', self.debug_img)
         if stats_l.open_hand_shape or stats_u.open_hand_shape:
             self.outcome = OPEN_HAND
             if stats_u.two_fingers_shape:
-                #cv2.imshow('P', self.debug_img)
                 self.outcome = TWO_FINGERS
         elif stats_l.thickness_avg*0.4 > stats_u.thickness_avg and stats_u.thickness_avg > 0.0:
             self.outcome = ONE_FINGER
@@ -380,8 +372,6 @@ cdef class BodyPartsModel(object):
                 self.outcome = PALM
             else:
                 self.outcome = FACE
-        elif stats_v.up_down_white:
-            self.outcome = FACE
         else:
-            self.outcome = UNKNOWN
+            self.outcome = FACE
 

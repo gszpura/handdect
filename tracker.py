@@ -339,7 +339,6 @@ class StateTracker(object):
         s_rects = sorted(rects, key=rev_area)
         self.rects = s_rects[:2]
         self.rects_small = s_rects[2:4]
-        #print map(lambda x: x[2]*x[3], s_rects)
         #print self.rects
 
         
@@ -448,40 +447,6 @@ class StateTracker(object):
             self.before_prediction_rect = self.last_rect
         if self.prediction_counter >= 2 and self.last_rect is not None:
             self.last_rect = self.before_prediction_rect
-
-
-    def fit_rect_size(self):
-        if self.last_rect is None:
-            return
-        self.last_rect = list(self.last_rect)
-        x,y,w,h = self.last_rect
-        hx,hy,hw,hh = self.head_rect
-        x_left = x + w > hx and x < hx
-        x_right = x < hx + hw and x + w > hx + hw
-        y_up = y + h > hy and y < hy
-        y_down = y < hy + hh and y + h > hy + hh
-        
-        if x_left and w > 260 and self.average_dxy[0] < 0:
-            diff = x + w - hx
-            self.last_rect[2] = w - diff/2
-        if x_left and w > 260 and self.average_dxy[0] < -20:
-            self.last_rect[0] = x - diff/4
-
-        if x_right and w > 260 and self.average_dxy[0] > 0:
-            diff = hx + hw - x
-            self.last_rect[0] = x + diff/4
-            self.last_rect[2] = w - diff/4
-
-        if y_up and x_left and h > 300 and self.average_dxy[1] < 0:
-            diff = y + h - hy
-            self.last_rect[3] = h - diff/4
-        
-        if y_down and x_right and h > 300:
-            diff = hy + hh - y
-            #self.last_rect[1] = y + diff/4
-
-        if self.last_rect[3] > CFG_HEIGHT/1.5:
-            self.last_rect[3] = int(self.last_rect[3]/1.5)
 
     def shape_analysis(self):
         self.current_types = []
@@ -669,7 +634,7 @@ class StateTracker(object):
             self.out = True
             return None, self.gesture
         self.prediction_limit(prediction)
-        #self.fit_rect_size()
+
         if self.last_rect:
             draw_rects(img, [self.last_rect], 2)
             return self.last_rect, self.gesture

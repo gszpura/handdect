@@ -204,6 +204,7 @@ def cnt_area(cnt):
     """Function returns area for contour"""
     return cv2.moments(cnt)["m00"]
 
+
 def rev_cnt_area(cnt):
     area = cv2.moments(cnt)["m00"]
     if area == 0:
@@ -214,8 +215,7 @@ def rev_cnt_area(cnt):
 def get_biggest_cnt(cnts, how_many=1):
     if how_many == 1:
         try:
-            biggest = max(cnts, key=cnt_area)
-            biggest = [biggest]
+            biggest = [max(cnts, key=cnt_area)]
         except Exception as e:
             print e, "get_biggest_cnt"
             biggest = None

@@ -139,6 +139,7 @@ class Transformer:
             big_rect[3] += 50
         elif big_rect[3] > 1.5*big_rect[2]:
             big_rect[2] += 50
+        big_rect = [0, 10, 640, 470]
         
         result = np.zeros((img.shape[0], img.shape[1]), np.uint8)
         result[big_rect[1]:big_rect[1]+big_rect[3], big_rect[0]:big_rect[0]+big_rect[2]] = 255
