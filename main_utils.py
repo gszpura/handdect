@@ -42,6 +42,10 @@ def draw_rects(image, rects, wide=1, color=(255,0,0)):
 def draw_circles(img, positions, r=20):
     for pos in positions:
         cv2.circle(img, pos, r, (255,0,0))
+
+def draw_info(img, text, x, y):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(img, text, (x, y), font, 1, (255,255,255), 2)
         
         
 def close_to_edge(rect):
@@ -148,17 +152,6 @@ def distance_between_rects(rect1, rect2):
     return distance
 
 
-def further_from_rect(rectx, rect1, rect2):
-    d1 = distance_between_rects(rectx, rect1)
-    d2 = distance_between_rects(rectx, rect2)
-    print d2, d1, "DDD"
-    print rect2, rect1
-    print rectx
-    if d2 > d1:
-        return rect2
-    return rect1
-
-
 def one_inside_another(current, previous, ratio=3, rigid=False):
     """
         Checks if rect 'current' is inside rect 'previous'.
@@ -226,3 +219,30 @@ def get_biggest_cnt(cnts, how_many=1):
         if len(biggest) == 0:
             return None
     return biggest
+
+
+def minimal_rect(rect):
+    """
+    If rect is too small make it a bit bigger
+    in ordert to not to miss part of the hand.
+    """
+    x, y, w, h = rect
+    if w < 70:
+        x = max(0, x - 50)
+        w = min(640, w + 70)
+    if h < 70:
+        y = max(0, y - 50)
+        h = min(480, h + 70)
+    if h < 125 and w > 125:
+        y = max(0, y - 100)
+        h = min(480, h + 100)
+    return [x, y, w, h]
+
+
+def find_contours(roi):
+    contours, hierarchy = cv2.findContours(roi.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    return contours
+
+
+def fill_in_contour(roi, cnt):
+    cv2.drawContours(roi, [cnt], -1, (255,0,0), -1)

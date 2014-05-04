@@ -43,10 +43,10 @@ from main_utils import draw_circles, \
     average_rect, \
     is_near_rect, \
     distance_between_rects, \
-    further_from_rect, \
     is_real_check, \
     get_roi, \
-    average_from_rects
+    average_from_rects, \
+    minimal_rect
 from shape_discovery import ShapeDiscovery
 
 
@@ -636,6 +636,7 @@ class StateTracker(object):
         self.prediction_limit(prediction)
 
         if self.last_rect:
+            self.last_rect = minimal_rect(self.last_rect)
             draw_rects(img, [self.last_rect], 2)
             return self.last_rect, self.gesture
         return None, self.gesture

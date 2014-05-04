@@ -218,7 +218,8 @@ class Calibration(object):
             self.thr, thresholded = cv2.threshold(v_, 0, 255, cv2.THRESH_OTSU)
         else:
             dummy, thresholded = cv2.threshold(v_, 240, 255, cv2.THRESH_BINARY)
-
+        cv2.imshow('thr', thresholded)
+        cv2.waitKey(20)
         cnts, hier = cv2.findContours(thresholded.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnt = self.biggest_cnt(cnts)
         if cnt is None:

@@ -17,10 +17,10 @@ if cv2.__version__.find('2.4.8') > -1:
     _, f = c.read()
 save_roi = False
 
-PHOTO_DIR = "\\test_images\\"
+PHOTO_DIR = "\\badanie\\"
 
 counter = 0
-prefix = "nohand5_"
+prefix = "day2_gest_"
 while(1):
     _,f = c.read()
     if save_roi:
@@ -28,7 +28,7 @@ while(1):
         name = prefix + "hand%s.jpg" % counter
     else:
         save_image = f
-        name = prefix + "scene%s.jpg" % counter
+        name = prefix + "%s.jpg" % counter
 
     roi = f[f.shape[0]/6:4*f.shape[0]/6, 
             f.shape[1]/8:4*f.shape[1]/8]

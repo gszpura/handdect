@@ -89,16 +89,19 @@ cdef class Leaf:
         second is WHITE and 20 pixels thick
         third is BLACK and self.slice_len - 120 pixels thick
         """
-        cdef unsigned int iter_range = self.slice_len - 1
         cdef int max = 255
         self.first = max in self.slice[0:5] and WHITE or BLACK 
         self.last = max in self.slice[-5:-1] and WHITE or BLACK
-        cdef int cnt, current
-        cnt = 1
-        current = self.slice[1] & 0x01
+
+        cdef unsigned int iter_range = self.slice_len - 1
+        cdef int cnt, current, tmp
         cdef unsigned int i
-        for i in xrange(1, iter_range):
-            if self.slice[i] & 0x01 != current:
+
+        current = self.slice[0] & 0x01
+        for i in xrange(0, iter_range):
+            tmp = self.slice[i]
+            tmp = tmp > 10 and 0x01 or 0x00
+            if tmp & 0x01 != current:
                 current ^= 0x01
                 self.footprint.append(cnt)
                 cnt = 1
@@ -149,7 +152,7 @@ cdef class LeafStats:
         Vast majority of the leafs must have more than 4 regions.
         """
         cdef int all_leafs = sum(distribution)
-        cdef int part_value = int(0.75*self.non_empty_distribution_sum)
+        cdef int part_value = int(0.7*self.non_empty_distribution_sum)
         cdef bool fingers = False
         fingers = sum(distribution[4:15]) > part_value
         return fingers
@@ -202,10 +205,13 @@ cdef class LeafStats:
     cdef bool calc_fluctuations(LeafStats self, list edge):
         cdef unsigned int i
         cdef unsigned int length = len(edge)
+
+        if length <= 1:
+            return False
+
         cdef int counter = 0
         cdef int grad = sign(edge[1] - edge[0])
         cdef int tmp = 0
-
         for i in xrange(0, length-1):
             tmp_sign = sign(edge[i+1] - edge[i])
             if  tmp_sign != grad and tmp_sign != 0:
@@ -216,17 +222,17 @@ cdef class LeafStats:
         return False
 
 
-    cdef void stats(self):
+    cdef bool stats(self):
         cdef list distribution = self.init_distribution()
         cdef list edge = []
         cdef list thickness = []  
-        
+
         cdef list tmp_leafs = self.leafs
         cdef unsigned int length = len(tmp_leafs)
         cdef unsigned int i, j
 
         if length == 0:
-            return
+            return False
 
         #internal loop variables
         cdef Leaf leaf
@@ -253,8 +259,8 @@ cdef class LeafStats:
 
         self.distribution = distribution
         self.non_empty_distribution_sum = sum(self.distribution) - self.distribution[1]
-        self.edge = edge
 
+        self.edge = edge
         self.thickness_dev = self.calc_thickness_dev(thickness)
         self.edge_dev = self.calc_edge_dev(edge)
         self.thickness_avg = self.calc_thickness_avg(thickness)
@@ -264,7 +270,7 @@ cdef class LeafStats:
         self.face_shape = self.calc_face_shape(distribution)
 
         self.fluctuations = self.calc_fluctuations(edge)
-
+        return True
 
 cdef class BodyPartsModel(object):
 
@@ -297,28 +303,34 @@ cdef class BodyPartsModel(object):
         return False
 
     cdef list get_upper_leafs(self):
+        cdef list leafs = []
+        if self.img is None:
+            return leafs
+
         cdef np.ndarray[np.uint8_t, ndim=2] img = self.img
         cdef int amount = img.shape[0]/HORIZONTAL_JUMP
-        cdef int fst_jumps = amount/2
-        cdef int c = 20
-        cdef list leafs = []
+        cdef int how_many_jumps = 2*amount/3
+        cdef int position = 20
 
         cdef unsigned int i, j
         cdef np.ndarray[np.uint8_t, ndim=1] sl
-        cdef int JUMP = 2*HORIZONTAL_JUMP/3
-        for i in xrange(0, fst_jumps):
-            sl = img[c:c+1][0].copy()
-            #self.debug_img[c:c+1][0] = 0
-            c += JUMP
+        cdef int JUMP = HORIZONTAL_JUMP/2
+        for i in xrange(0, how_many_jumps):
+            sl = img[position:position+1][0].copy()
+            self.debug_img[position:position+1][0] = 0
+            position += JUMP
             leafs.append(Leaf(sl.tolist()))
         return leafs
 
     cdef list get_lower_leafs(self):
+        cdef list leafs = []
+        if self.img is None:
+            return leafs
+
         cdef np.ndarray[np.uint8_t, ndim=2] img = self.img
         cdef int amount = img.shape[0]/HORIZONTAL_JUMP
         cdef int sec_jumps = amount/2
         cdef int c = img.shape[0]/2
-        cdef list leafs = []
 
         cdef unsigned int j
         cdef np.ndarray[np.uint8_t, ndim=1] sl
@@ -329,8 +341,11 @@ cdef class BodyPartsModel(object):
         return leafs
 
     cdef list get_vertical_leafs(self):
-        cdef np.ndarray[np.uint8_t, ndim=2] img = self.img
         cdef list leafs = []
+        if self.img is None:
+            return leafs
+
+        cdef np.ndarray[np.uint8_t, ndim=2] img = self.img
         cdef int how_many = int(0.8*self.w/(VERTICAL_JUMP))
         cdef int amount = min(14, how_many)
         cdef int c = self.w/5
@@ -350,7 +365,7 @@ cdef class BodyPartsModel(object):
         cdef list uleafs, lleafs, vleafs
         cdef LeafStats stats_u, stats_l, stats_v
 
-        #self.debug_img = self.img.copy()
+        self.debug_img = self.img.copy()
         vleafs = self.get_vertical_leafs()
         lleafs = self.get_lower_leafs()
         uleafs = self.get_upper_leafs()
@@ -358,15 +373,15 @@ cdef class BodyPartsModel(object):
         stats_u =  LeafStats(uleafs)
         stats_v = LeafStats(vleafs)
 
-        #cv2.imshow('Debug Image', self.debug_img)
         if stats_l.open_hand_shape or stats_u.open_hand_shape:
+            #cv2.imshow('Debug Image', self.debug_img)
             self.outcome = OPEN_HAND
             if stats_u.two_fingers_shape:
                 self.outcome = TWO_FINGERS
         elif stats_l.thickness_avg*0.4 > stats_u.thickness_avg and stats_u.thickness_avg > 0.0:
             self.outcome = ONE_FINGER
         elif stats_l.face_shape and stats_u.face_shape:
-            if 0.40 > stats_v.edge_dev > 0.16 and stats_v.thickness_dev > 0.10:
+            if 0.50 > stats_v.edge_dev > 0.15 and stats_v.thickness_dev > 0.10:
                 self.outcome = THUMB
             elif stats_v.fluctuations:
                 self.outcome = PALM
@@ -374,4 +389,3 @@ cdef class BodyPartsModel(object):
                 self.outcome = FACE
         else:
             self.outcome = FACE
-
