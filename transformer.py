@@ -4,6 +4,10 @@ import time
 
 from main_utils import LATTICE_X, LATTICE_Y
 from main_utils import draw_rects
+from cleaner import Cleaner
+from config import CLASSIFIER, HEIGHT, WIDTH
+
+
 absd = cv2.absdiff
 
 def rev_area(rect):
@@ -11,46 +15,18 @@ def rev_area(rect):
 
 class Transformer:
 
-    def __init__(self, light, color_h, color_yv, threshold, height=480, width=640):
-        self.last = np.zeros((height, width), np.uint8)
+    def __init__(self, light, color_h, color_yv, threshold):
+        self.last = np.zeros((HEIGHT, WIDTH), np.uint8)
         self.element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
-        self.light = light
-        self.width = width
-        self.height = height
         self.hsv = color_h
         self.yuv = color_yv
         self.thr = threshold
+        self.cleaner = Cleaner(light)
+        self.skin_classifier = getattr(self, "%s_skin_classifier" % CLASSIFIER)
 
     def turn_on_bayes_classifier(self, s_h, s_v):
         self.s_h = s_h
         self.s_v = s_v
-        
-    def _morpho_day(self, img):
-        element = self.element
-        d = cv2.erode(img, element)
-        d = cv2.erode(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        return d
-
-    def _morpho_night(self, img):
-        element = self.element
-        d = cv2.erode(img, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        return d
-
-    def _morpho_bayes(self, img):
-        element = self.element
-        d = cv2.erode(img, element)
-        d = cv2.erode(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.erode(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        d = cv2.dilate(d, element)
-        return d
 
     def find_important_planes(self, img):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -75,13 +51,7 @@ class Transformer:
         whole_h = cv2.bitwise_or(r1_h, r2_h)
         whole_v = cv2.bitwise_or(r1_v, r2_v)
         d = cv2.bitwise_and(whole_v, whole_h)
-        #cv2.imshow('value', d)
         d = cv2.bitwise_and(d, value)
-        #cv2.imshow('whole', d)
-        if self.light == "Night":
-            d = self._morpho_night(d)
-        elif self.light == "Day":
-            d = self._morpho_day(d)
         return d
 
     def classify(self, img, plane):
@@ -97,9 +67,6 @@ class Transformer:
         h_class = self.classify(h_, "h")
         v_class = self.classify(v, "v")
         d = cv2.bitwise_and(h_class, v_class)
-        #cv2.imshow('whole', d)
-
-        d = self._morpho_bayes(d)
         return d
         
     def move_cue(self, img):
@@ -152,9 +119,7 @@ class Transformer:
         s_rects = sorted(rects, key=rev_area)
         return s_rects[:20]
         
-    def postprocess(self, img):
-        img = cv2.medianBlur(img, 3)
-        return img
-        
+    def clean_whole_image(self, img):
+        return self.cleaner.clean(img)
         
         

@@ -88,16 +88,14 @@ def mainSubHSV(profile=0):
 
     while (1):
         f = read_camera()
-        
+
         move_cue = trf.move_cue(f)
-        #t1 = time.time()
-        #skin_cue = trf.bayes_skin_classifier(f)
-        skin_cue = trf.linear_skin_classifier(f)
-        #print time.time() - t1
+        skin_cue = trf.skin_classifier(f)
+        skin_cue = trf.clean_whole_image(skin_cue)
         final = cv2.bitwise_and(skin_cue, move_cue)
         track.update(final)
         info = track.follow(f)
-        
+
         cv2.imshow('IMG', f)
         cv2.imshow('SKIN FINAL', final)
         k = cv2.waitKey(20)
