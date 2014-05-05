@@ -241,6 +241,9 @@ class Calibration(object):
             mask, non_head_mask = self.discover_regions(img)
 
         if mask is None or non_head_mask is None:
+            self.cnt += 1
+            if self.cnt > self.cnt_max:
+                self.end = 1
             return
         roi_h = get_roi(h_, self.rect)
         roi_v = get_roi(v, self.rect)

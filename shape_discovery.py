@@ -30,6 +30,16 @@ def reshape_rect_based_on_mass(roi, rect):
 		xr, yr, wr, hr = rect
 		print (x, y), (xr, yr)
 
+def reshape_if_above(img, rect):
+	rect_above = [rect[0], max(0, rect[1]-rect[3]/2),
+				 rect[2], min(rect[3]/2, rect[1])]
+	roi = get_roi(img, rect_above)
+	size = rect[2]*rect[3]
+
+	if 0.3*size > cv2.countNonZero(roi) > 0.025*size:
+		return [rect[0], rect_above[1], rect[2], rect[3] + rect_above[3]]
+	return rect
+
 class ShapeDiscovery(object):
 
 	def __init__(self):
@@ -39,7 +49,9 @@ class ShapeDiscovery(object):
 	def discover(self, img, rect=None):
 		if rect == None:
 			return
-		rect = minimal_rect(rect)
+		if self.last == "PALM":
+			rect = reshape_if_above(img, rect)
+
 		roi = get_roi(img, rect)
 
 		roi = self.cleaner.apply_dilates(roi)

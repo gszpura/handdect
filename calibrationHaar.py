@@ -25,7 +25,7 @@ class CalibrationHaar(Calibration):
 		self.head = "cascades/haarcascade_frontalface_alt.xml"
 		self.head_cascade = cv2.CascadeClassifier(self.head)
 		
-		super(CalibrationHaar, self).__init__(HEIGHT, WIDTH)
+		super(CalibrationHaar, self).__init__()
 		self.planes = "image"
 
 	def get_non_head_mask(self, box):
