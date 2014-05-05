@@ -38,7 +38,6 @@ from main_utils import draw_circles, \
     is_very_close, \
     combine_rects, \
     one_inside_another, \
-    CFG_HEIGHT, CFG_WIDTH, \
     draw_circles, \
     average_rect, \
     is_near_rect, \
@@ -48,44 +47,11 @@ from main_utils import draw_circles, \
     average_from_rects, \
     minimal_rect
 from shape_discovery import ShapeDiscovery
+from config import HEIGHT, WIDTH
 
-
-class RectSaver(object):
-
-    def __init__(self):
-        self.img1 = None
-        self.img2 = None
-        self.state = 0
-
-    def save_hand(self, img, rect1=None, rect2=None):
-        if rect1:
-            x,y,w,h = rect1
-            img1 = img[y:y+h, x:x+w] 
-            self.save_img(img1)
-        if rect2:
-            x,y,w,h = rect2
-            img2 = img[y:y+h, x:x+w]
-            self.save_img(img2)
-
-    def save_img(self, img):
-        cv2.imwrite('C:\\Python27\\pdym\\imgs\img%s.png' % self.state, img)
-        self.state += 1
-
-    @staticmethod
-    def show_hand(img, rect1=None, rect2=None):
-        if rect1:
-            x,y,w,h = rect1
-            zero = np.zeros((300,300), np.unit8)
-            img1 = img[y:y+h, x:x+w]
-            zero[0:h, 0:w] = img1 
-            cv2.imshow('1', zero)
-        if rect2:
-            x,y,w,h = rect2
-            zero = np.zeros((300,300), np.unit8)
-            img2 = img[y:y+h, x:x+w]
-            zero[0:h, 0:w] = img2
-            cv2.imshow('2', zero)    
-            
+BORDER_X = int(0.06*WIDTH)
+BORDER_Y = int(0.08*HEIGHT)
+RECT_DISTANCE = int(0.06*WIDTH)
 
 class TrackerAL:
 
@@ -298,10 +264,9 @@ class StateTracker(object):
     def __init__(self):
         self.clear()
         self.out_limit = 10
-        self.rsave = RectSaver()
         self.dsc = ShapeDiscovery()
         self.head_rect = [200, 200, 0, 0]
-        self.head_biggest = [640, 480, 0, 0]
+        self.head_biggest = [WIDTH, HEIGHT, 0, 0]
         self.head_history = deque([], maxlen=20)
 
     def clear(self):
@@ -364,7 +329,7 @@ class StateTracker(object):
     def outside_scope(self):
         if self.last_rect is None:
             return True
-        if self.last_rect[0] < 0 or self.last_rect[0] > CFG_WIDTH or self.last_rect[1] < 0 or self.last_rect[1] > CFG_HEIGHT:
+        if self.last_rect[0] < 0 or self.last_rect[0] > WIDTH or self.last_rect[1] < 0 or self.last_rect[1] > HEIGHT:
             return True
         return False
 
@@ -378,9 +343,9 @@ class StateTracker(object):
         cy = self.last_rect[1] + 0.5*self.average_wh[1]
         if lx < 0 and self.average_dxy[0] <= -10:
             return True
-        if rx > CFG_WIDTH - 40 and self.average_dxy[0] >= 10:
+        if rx > WIDTH - BORDER_X and self.average_dxy[0] >= 10:
             return True
-        if cy > CFG_HEIGHT - 40 and self.average_dxy[1] >= 10:
+        if cy > HEIGHT - BORDER_Y and self.average_dxy[1] >= 10:
             return True
         if self.is_not_real_counter > 5:
             return True
@@ -506,7 +471,7 @@ class StateTracker(object):
     def is_head(self, rect):
         if is_very_close(rect, self.head_rect, dm=12):
             return True
-        elif distance_between_rects(rect, self.head_biggest) < 40:
+        elif distance_between_rects(rect, self.head_biggest) < RECT_DISTANCE:
             return True
         return False
 

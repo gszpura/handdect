@@ -298,7 +298,7 @@ cdef class BodyPartsModel(object):
         if self.img is None:
             return True
         size = img.shape[0]*img.shape[1]
-        if size < 4000:
+        if size < 2000:
             return True
         return False
 

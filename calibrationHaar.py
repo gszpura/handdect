@@ -4,7 +4,7 @@ import cv2.cv as cv
 
 from calibration2 import Calibration
 from main_utils import draw_boxes, get_biggest_cnt
-
+from config import HEIGHT, WIDTH
 
 def detect(img, cascade):
     rects = cascade.detectMultiScale(img, scaleFactor=1.3, minNeighbors=4, minSize=(30, 30), flags = cv.CV_HAAR_SCALE_IMAGE)
@@ -21,11 +21,11 @@ def draw_mask(img, rect):
 class CalibrationHaar(Calibration):
 
 
-	def __init__(self, height=480, width=640):
+	def __init__(self):
 		self.head = "cascades/haarcascade_frontalface_alt.xml"
 		self.head_cascade = cv2.CascadeClassifier(self.head)
 		
-		super(CalibrationHaar, self).__init__(height, width)
+		super(CalibrationHaar, self).__init__(HEIGHT, WIDTH)
 		self.planes = "image"
 
 	def get_non_head_mask(self, box):

@@ -17,6 +17,7 @@ class Transformer:
 
     def __init__(self, light, color_h, color_yv, threshold):
         self.last = np.zeros((HEIGHT, WIDTH), np.uint8)
+        self.no_move_level = 0.05*HEIGHT*WIDTH
         self.element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
         self.hsv = color_h
         self.yuv = color_yv
@@ -80,7 +81,7 @@ class Transformer:
         d = dilated.copy()
         contours, hier = cv2.findContours(d, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         rects = self.choose_contour(contours)
-        big_rect = [640,480,0,0]
+        big_rect = [WIDTH, HEIGHT, 0, 0]
         for rect in rects:
             if rect[0] < big_rect[0]:
                 big_rect[0] = rect[0]
@@ -90,14 +91,14 @@ class Transformer:
                 big_rect[2] = rect[0] + rect[2] - big_rect[0]
             if rect[1] + rect[3] > big_rect[1] + big_rect[3]:
                 big_rect[3] = rect[1] + rect[3] - big_rect[1]
-        if big_rect[2]*big_rect[3] < 16000:
-            big_rect = [0, 10, 640, 470]
-        elif big_rect[2]*big_rect[3] < 24000:
+        if big_rect[2]*big_rect[3] < self.no_move_level:
+            big_rect = [0, 10, WIDTH, HEIGHT - 10]
+        elif big_rect[2]*big_rect[3] < self.no_move_level*1.5:
             big_rect[0] = max(0, big_rect[0] - 20)
             big_rect[2] += 50
             big_rect[1] = max(0, big_rect[1] - 25)
             big_rect[3] += 90
-        elif big_rect[2]*big_rect[3] < 28000:
+        elif big_rect[2]*big_rect[3] < self.no_move_level*1.7:
             big_rect[0] = max(0, big_rect[0] - 15)
             big_rect[2] += 30
             big_rect[1] = max(0, big_rect[1] - 20)
@@ -106,11 +107,10 @@ class Transformer:
             big_rect[3] += 50
         elif big_rect[3] > 1.5*big_rect[2]:
             big_rect[2] += 50
-        big_rect = [0, 10, 640, 470]
+        big_rect = [0, 10, WIDTH, HEIGHT - 10]
         
         result = np.zeros((img.shape[0], img.shape[1]), np.uint8)
         result[big_rect[1]:big_rect[1]+big_rect[3], big_rect[0]:big_rect[0]+big_rect[2]] = 255
-        #cv2.imshow('MOVE', result)
         self.last = gray
         return result
 

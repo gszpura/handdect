@@ -3,6 +3,7 @@ import numpy as np
 import time
 from main_utils import draw_rects, \
     get_roi
+from config import HEIGHT, WIDTH
 
 absd = cv2.absdiff
 
@@ -114,10 +115,10 @@ def clear_conf_v(conf):
 
 class Calibration(object):
 
-    def __init__(self, height=480, width=640):
+    def __init__(self):
         self.element = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
-        self.h = height
-        self.w = width
+        self.h = HEIGHT
+        self.w = WIDTH
         self.rect = [0, 0, 0, 0]
 
         self.conf_h = [0, 0, 0, 0]
@@ -125,7 +126,7 @@ class Calibration(object):
         self.thr = 90
         self.light = "Day"
 
-        self.last = np.zeros((height, width), np.uint8)
+        self.last = np.zeros((self.h, self.w), np.uint8)
         self.end = 0
         self.cnt = 0
         self.cnt_max = 30

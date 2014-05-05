@@ -17,6 +17,7 @@ from hand_picker import HandPicker
 from main_utils import draw_boxes
 from calibration2 import Calibration
 from calibrationHaar import CalibrationHaar
+from config import HEIGHT, WIDTH
 
 
 #global init
@@ -58,6 +59,8 @@ def read_image():
 
 def read_camera():
     _, f = c.read()
+    if HEIGHT != 480:
+        f = cv2.resize(f, (WIDTH, HEIGHT))
     return f
 
 

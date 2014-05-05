@@ -4,12 +4,13 @@
 
 import cv2
 from math import sqrt
+from config import HEIGHT, WIDTH
 
 LATTICE_X = 20
 LATTICE_Y = 20
 
-CFG_WIDTH = 640
-CFG_HEIGHT = 480
+CFG_WIDTH = HEIGHT
+CFG_HEIGHT = WIDTH
 
 #for entering a frame/window
 CFG_WIDTH_RATIO = 0.75
@@ -23,6 +24,9 @@ CFG_DH = CFG_HEIGHT/3
 
 CFG_FAR_AWAY_X = int(CFG_WIDTH/3.5)
 CFG_FAR_AWAY_Y = int(CFG_HEIGHT/2.5)
+
+MINIMUM_W = int(0.1*WIDTH)
+MINIMUM_H = int(0.14*HEIGHT)
 
 
 def draw_boxes(image, boxes, wide=1):
@@ -227,15 +231,15 @@ def minimal_rect(rect):
     in ordert to not to miss part of the hand.
     """
     x, y, w, h = rect
-    if w < 70:
-        x = max(0, x - 50)
-        w = min(640, w + 70)
-    if h < 70:
-        y = max(0, y - 50)
-        h = min(480, h + 70)
-    if h < 125 and w > 125:
-        y = max(0, y - 100)
-        h = min(480, h + 100)
+    if w < MINIMUM_W:
+        x = max(0, x - (MINIMUM_W - 10))
+        w = min(640, w + MINIMUM_W)
+    if h < MINIMUM_H:
+        y = max(0, y - (MINIMUM_H - 10))
+        h = min(480, h + MINIMUM_H)
+    if h < MINIMUM_H*2 and w > MINIMUM_W*2:
+        y = max(0, y - MINIMUM_H)
+        h = min(480, h + MINIMUM_H)
     return [x, y, w, h]
 
 
