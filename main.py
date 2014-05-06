@@ -3,7 +3,7 @@ Methods:
 * Background substraction + HSV
 * HAAR cascades
 
-Last updated: 03-05-2014
+Last updated: 06-05-2014
 """
 import cv2
 import os
@@ -14,42 +14,14 @@ from tracker import TrackerAL, StateTracker
 from transformer import Transformer
 from haartrack import FaceTracker, Face, Hand, HandTracker
 from hand_picker import HandPicker
-from main_utils import draw_boxes
+from main_utils import draw_boxes, \
+    init_camera, \
+    release_camera
 from calibration2 import Calibration
 from calibrationHaar import CalibrationHaar
 from config import HEIGHT, WIDTH
 
-
-#global init
-shot = False
-c = cv2.VideoCapture(0)
-if cv2.__version__.startswith('2.4.8'):
-    _,f = c.read()
-
-#version for Cascades
-def mainCascades():
-    track = TrackerAL()
-    hnd = HandTracker()
-
-    while(1):    
-        _,f = c.read()
-        st = time.time()
-        small = cv2.resize(f, (320, 240))
-        hnd.update(small)
-        print time.time() - st
-        hands = hnd.hands
-        boxes = track.pbb(hands)
-        box = HandPicker.distinguish(small, boxes)
-        if box:
-            draw_boxes(small, [box])
-        cv2.imshow('IMG', small)
-        k = cv2.waitKey(20)	
-        if k == 113: #q 
-            shot = True
-        if k == 27:
-            break   
-    cv2.destroyAllWindows()
-    c.release()
+c = init_camera()
 
 
 def read_image():
@@ -62,6 +34,26 @@ def read_camera():
     if HEIGHT != 480:
         f = cv2.resize(f, (WIDTH, HEIGHT))
     return f
+
+
+#version for Cascades
+def mainCascades():
+    track = TrackerAL()
+    hnd = HandTracker()
+
+    while(1):    
+        _,f = c.read()
+        small = cv2.resize(f, (320, 240))
+        hnd.update(small)
+        hands = hnd.hands
+        boxes = track.pbb(hands)
+        box = HandPicker.distinguish(small, boxes)
+        if box:
+            draw_boxes(small, [box])
+        cv2.imshow('IMG', small)
+        k = cv2.waitKey(20)	
+        if k == 27:
+            break
 
 
 def run_calibration():
@@ -102,8 +94,6 @@ def mainSubHSV(profile=0):
         cv2.imshow('IMG', f)
         cv2.imshow('SKIN FINAL', final)
         k = cv2.waitKey(20)
-        if k == 113: #q
-            shot = True
         if k == 27:
             break
         # debug & profile part
@@ -111,11 +101,8 @@ def mainSubHSV(profile=0):
             profile -= 1
             if profile == 0:
                 break
-
-    cv2.destroyAllWindows()
-    c.release()
-
     
-    
+
 if __name__ == "__main__":
     mainSubHSV()
+    release_camera(c)

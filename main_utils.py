@@ -111,14 +111,6 @@ def combine_rects(last, to_merge):
     return (x1, y1, max(70, w), max(80, h))
 
 
-def average_rect(rect1, rect2):
-    x = (4*rect1[0] + rect2[0])/5
-    y = (4*rect1[1] + rect2[1])/5
-    w = (4*rect1[2] + rect2[2])/5
-    h = (4*rect1[3] + rect2[3])/5
-    return [x,y,w,h]
-
-
 def average_from_rects(rects):
     x = 0; y = 0; w = 0; h = 0
     for rect in rects:
@@ -191,6 +183,7 @@ def is_real_check(roi):
     else:
         return False
 
+
 def get_roi(img, rect):
     x,y,w,h = rect
     roi = img[y:y+h, x:x+w]
@@ -250,3 +243,71 @@ def find_contours(roi):
 
 def fill_in_contour(roi, cnt):
     cv2.drawContours(roi, [cnt], -1, (255,0,0), -1)
+
+
+def split_into_planes(img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+    H, S, V = cv2.split(hsv)
+    y, u, v = cv2.split(yuv)
+    return H, S, V, y, u, v
+
+
+def get_head_rect(img, user_contours):
+    """
+    @param img: thresholded V channel image
+    @param user_contours: user contours 
+    """
+    rect = list(cv2.boundingRect(user_contours))
+    rect[3] = rect[3]/2
+    roi = get_roi(img, rect)
+    cnts = find_contours(roi)
+    cnt = get_biggest_cnt(cnts)
+
+    rect_inside = list(cv2.boundingRect(cnt[0]))
+    rect[0] = rect[0] + rect_inside[0]
+    rect[1] = rect[1] + rect_inside[1]
+    rect[2] = rect_inside[2]
+    rect[3] = rect_inside[3]
+    return rect
+
+
+def find_head_with_otsu(V_channel):
+    """
+    Finds head with Otsu algorithm.
+    @param V_channel: luminance channel for Otsu method
+    """
+    thr, thresholded = cv2.threshold(V_channel, 0, 255, cv2.THRESH_OTSU)
+    cnts = find_contours(thresholded)
+    user_shape = get_biggest_cnt(cnts)
+    if user_shape is None:
+        return None
+    rect = get_head_rect(thresholded, user_shape[0])
+    head_mask = get_roi(thresholded, rect)
+    return head_mask, rect
+
+
+def calculate_histogram(roi, mask=None):
+    """
+    Calculates histogram 1D for region of interest.
+    @param roi: region of interest
+    @param mask: mask for region of interest
+    """
+    hist = cv2.calcHist([roi], [0], mask, histSize=[256], ranges=[0, 255])
+    return hist
+
+
+def init_camera():
+    c = cv2.VideoCapture(0)
+    if cv2.__version__.find('2.4.8') > -1:
+        # reading empty frame may be necessary
+        _, f = c.read()
+    return c
+
+
+def release_camera(camera):
+    try:
+        cv2.destroyAllWindows()
+        camera.release()
+    except:
+        print "Release exception"

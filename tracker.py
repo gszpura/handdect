@@ -3,23 +3,8 @@
         -> TrackerAL for HAAR Cascades
         -> StateTracker for background substraction + HSV + YUV
 
-    TODO pracy dyplomowej:
-    - convectivyDefects: jestli brak wiekszych w FACE to oznacza, ze to PALM 
-    - przepisac do cythona
-    - HAAR
-    - porownania i testy
-
-    TODO trackera:
-    - przechodzenie reki nad glowa: 
-        przeskakiwanie boxa: dodac 3 rect i sprawdzac czy nie jest blisko last_rect a rect[n] nie jest blisko head_rect
-        
-    - zamiana dloni i glowy 
-
-    TODO aplikacji:
-    - wykorzystac analize rectow w kazdej klatce
-
-    FUTURE TASKS/KNOWN BUGS:
-    - kalibracja tylko na podstawie glowy lub kalibracja na podstawie uniesionej dloni
+    FUTURE TASKS:
+    - kalibracja na podstawie uniesionej dloni?
 
 """
 
@@ -39,7 +24,6 @@ from main_utils import draw_circles, \
     combine_rects, \
     one_inside_another, \
     draw_circles, \
-    average_rect, \
     is_near_rect, \
     distance_between_rects, \
     is_real_check, \

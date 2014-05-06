@@ -12,43 +12,26 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from pdym.main_utils import get_biggest_cnt, \
 	draw_rects, \
-    get_roi
+    get_roi, \
+    find_contours, \
+    split_into_planes, \
+    get_head_rect, \
+    find_head_with_otsu, \
+    init_camera, \
+    release_camera
 
 
-c = cv2.VideoCapture(0)
-if cv2.__version__.find('2.4.8') > -1:
-    # reading empty frame may be necessary 
-    _, f = c.read()
+c = init_camera()
 
-def get_head_rect(img, cnt):
-    """
-    Taken from: calibration2
-    """
-    rect = list(cv2.boundingRect(cnt))
-    rect[3] = rect[3]/2
-    approx_roi = get_roi(img, rect)
-    roi = approx_roi.copy()
-    #cv2.imshow('roihead', roi)
-    cnts, hier = cv2.findContours(roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnt = get_biggest_cnt(cnts)
+####Configuration####
+# Choose from: H, S, U, V, HS, UV, HV, HSp, HVp
+PLANE = "V"
+#####################
 
-    rect_inside = list(cv2.boundingRect(cnt))
-    rect[0] = rect[0] + rect_inside[0]
-    rect[1] = rect[1] + rect_inside[1]
-    rect[2] = rect_inside[2]
-    rect[3] = rect_inside[3]
-    return rect
-
-
-def find_important_planes(img):
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-    h_, s_, v_ = cv2.split(hsv)
-    y, u, v = cv2.split(yuv)
-    return h_, s_, v_, y, u, v
 
 def hsv(img):
 	return cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
 
 def hvv(img):
 	hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -58,22 +41,6 @@ def hvv(img):
 	hvv = cv2.merge((h_, v, v_))
 	return hvv
 
-def discover_regions(planes):
-    """
-    Taken from: calibration2
-    OTSU method is being used.
-    """
-    h_, v_, v = planes
-    thr, thresholded = cv2.threshold(v_, 0, 255, cv2.THRESH_OTSU)
-    
-    cnts, hier = cv2.findContours(thresholded.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnt = get_biggest_cnt(cnts)
-    if cnt is None:
-        return None
-
-    rect = get_head_rect(thresholded, cnt)
-    head_mask = get_roi(thresholded, rect)
-    return head_mask, rect
 
 def values_1d(roi, mask):
 	h, w = roi.shape
@@ -84,6 +51,7 @@ def values_1d(roi, mask):
 				v.append(roi[i][j])
 	return v
 
+
 def values_2d(plane1, plane2, mask):
 	h, w = plane1.shape
 	v = []
@@ -93,47 +61,43 @@ def values_2d(plane1, plane2, mask):
 				v.append((plane1[i][j], plane2[i][j]))
 	return v
 
-def hist(PLANE="V"):
+
+def hist():
 	"""
 	Creates 1d histograms of H, S planes from HSV 
 	or U, V planes from YUV color space.
 	Also creates 3d histograms of HS, UV, HV planes.
 	2d histograms (as an image) can be created for HS and HV planes.
-	Specify PLANE parameter for choose of histogram type.
-	Examples:
-	PLANE="H"
-	PLANE="HS"
-	PLANE="HSp" (for image version)
 	"""
 	cnt = 0
 	values = []
 
 	while(1):
 		_,f = c.read()
-		h_, s_, v_, y, u, v = find_important_planes(f)
-		mask, rect = discover_regions((h_, v_, v))
+		H, S, V, y, u, v = split_into_planes(f)
+		mask, rect = find_head_with_otsu(V)
 		if PLANE == "H":
-			roi_h = get_roi(h_, rect)
+			roi_h = get_roi(H, rect)
 			values.extend(values_1d(roi_h, mask))
 		elif PLANE == "V":
 			roi_v = get_roi(v, rect)
 			values.extend(values_1d(roi_v, mask))
 		elif PLANE == "S":
-			roi_s = get_roi(s_, rect)
+			roi_s = get_roi(S, rect)
 			values.extend(values_1d(roi_s, mask))
 		elif PLANE == "U":
 			roi_u = get_roi(u, rect)
 			values.extend(values_1d(roi_u, mask))
 		elif PLANE == "HS":
-			roi_h = get_roi(h_, rect)
-			roi_s = get_roi(s_, rect)
+			roi_h = get_roi(H, rect)
+			roi_s = get_roi(S, rect)
 			values.extend(values_2d(roi_h, roi_s, mask))
 		elif PLANE == "UV":
 			r1 = get_roi(u, rect)
 			r2 = get_roi(v, rect)
 			values.extend(values_2d(r1, r2, mask))
 		elif PLANE == "HV":
-			r1 = get_roi(h_, rect)
+			r1 = get_roi(H, rect)
 			r2 = get_roi(v, rect)
 			values.extend(values_2d(r1, r2, mask))
 		elif PLANE == "HSp":
@@ -147,14 +111,12 @@ def hist(PLANE="V"):
 			k = cv2.waitKey(0)
 			break
 		else:
-			PLANE = ""
+			return
 
 		cv2.imshow('IMG', mask)
 		k = cv2.waitKey(20)
 		cnt += 1
 		if cnt > 10:
-			cv2.destroyAllWindows()
-			c.release()
 			break
 
 	if len(PLANE) == 1:
@@ -163,10 +125,12 @@ def hist(PLANE="V"):
 		p1, p2 = zip(*values)
 		hist3d(p1, p2, PLANE)
 
+
 def hist1d(values, name):
 	n, bins, patches = plt.hist(values, 128, normed=0, facecolor='green', alpha=0.5)
 	plt.xlabel(name)
 	plt.show()
+
 
 def hist2d(roi, mask):
 	"""
@@ -211,5 +175,7 @@ def hist3d(plane1, plane2, names):
 	plt.ylabel(names[1])
 	plt.show()
 
-hist()
 
+if __name__ == "__main__":
+	hist()
+	release_camera(c)
