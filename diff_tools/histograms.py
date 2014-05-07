@@ -25,7 +25,7 @@ c = init_camera()
 
 ####Configuration####
 # Choose from: H, S, U, V, HS, UV, HV, HSp, HVp
-PLANE = "V"
+PLANE = "H"
 #####################
 
 

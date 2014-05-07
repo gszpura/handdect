@@ -253,6 +253,12 @@ def split_into_planes(img):
     return H, S, V, y, u, v
 
 
+def get_H_channel(img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    H, S, V = cv2.split(hsv)
+    return H
+
+
 def get_head_rect(img, user_contours):
     """
     @param img: thresholded V channel image
@@ -311,3 +317,11 @@ def release_camera(camera):
         camera.release()
     except:
         print "Release exception"
+
+
+def save_image(image, name='image.jpg'):
+    cv2.imwrite(name, image)
+
+
+def read_image(name='image.jpg'):
+    return cv2.imread(name)
