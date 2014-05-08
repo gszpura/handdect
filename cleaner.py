@@ -17,14 +17,11 @@ class Cleaner(object):
 		d = cv2.erode(img, element)
 		d = cv2.erode(d, element)
 		d = cv2.dilate(d, element)
-		d = cv2.dilate(d, element)
 		return d
 
 	def clean_at_night(self, img):
 		element = self.element
 		d = cv2.erode(img, element)
-		d = cv2.dilate(d, element)
-		d = cv2.dilate(d, element)
 		d = cv2.dilate(d, element)
 		return d
 
@@ -40,9 +37,6 @@ class Cleaner(object):
 		d = cv2.erode(d, element)
 		d = cv2.erode(d, element)
 		d = cv2.erode(d, element)
-		d = cv2.dilate(d, element)
-		d = cv2.dilate(d, element)
-		d = cv2.dilate(d, element)
 		return d
 
 	def clean(self, img):
@@ -53,6 +47,13 @@ class Cleaner(object):
 
 	def apply_dilates(self, roi):
 		c = len(find_contours(roi))
+		roi = cv2.dilate(roi, self.element)
+		roi = cv2.dilate(roi, self.element)
+		if CLASSIFIER == "bayes":
+			roi = cv2.dilate(roi, self.element)
+			roi = cv2.dilate(roi, self.element)
+			roi = cv2.dilate(roi, self.element)
+			roi = cv2.dilate(roi, self.element)
 		if c > 12:
 			r = cv2.dilate(roi, self.element)
 			r = cv2.dilate(r, self.element)
@@ -121,4 +122,5 @@ class Cleaner(object):
 		rebuilded = np.zeros(roi.shape, np.uint8)
 		if len(cnts) > 0: [fill_in_contour(rebuilded, cnt) for cnt in cnts]
 		return rebuilded
+
 

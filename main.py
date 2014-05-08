@@ -36,8 +36,7 @@ def read_camera():
     return f
 
 
-#version for Cascades
-def mainCascades():
+def main_viola_jones():
     track = TrackerAL()
     hnd = HandTracker()
 
@@ -73,7 +72,7 @@ def run_calibration():
 
 
 #version with Substraction and HSV detection
-def mainSubHSV(profile=0):
+def main_system(profile=0):
     clbr = run_calibration()
 
     print "*******", clbr.conf_h, clbr.conf_yv, clbr.thr, clbr.light, "*******"
@@ -104,5 +103,5 @@ def mainSubHSV(profile=0):
     
 
 if __name__ == "__main__":
-    mainSubHSV()
+    main_system()
     release_camera(c)

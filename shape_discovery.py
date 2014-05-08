@@ -53,12 +53,10 @@ class ShapeDiscovery(object):
 			rect = reshape_if_above(img, rect)
 
 		roi = get_roi(img, rect)
-
 		roi = self.cleaner.apply_dilates(roi)
 		roi = self.cleaner.apply_lattice_cleaning(roi)
 		roi_trf = self.cleaner.apply_rebuild(roi)
-		#if rect[0] < 100:
-		#	cv2.imshow('iii', roi_trf)
+
 		bpm = BodyPartsModel(roi_trf)
 		shape_type = BODY_PARTS[bpm.get_value()]
 		shape_type = self.correct_shape_type(shape_type)

@@ -1,4 +1,4 @@
-from pdym.main import mainSubHSV
+from pdym.main import main_system
 
 
 def run_profile(function):
@@ -8,4 +8,4 @@ def run_profile(function):
 		print "Exception: ", e
 
 
-run_profile(mainSubHSV)
+run_profile(main_system)
